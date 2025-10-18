@@ -1,0 +1,79 @@
+# Thanos Example Boltfile
+# Demonstrates running Glyph MCP server with Omen router via Bolt containers
+
+project = "thanos-ai-stack"
+
+# Glyph MCP Server - Provides MCP tools and governance
+[services.glyph]
+image = "ghcr.io/ghostkellz/glyph:latest"
+ports = ["50051:50051"]  # gRPC/QUIC endpoint
+environment = [
+    "MCP_TRANSPORT=grpc",
+    "GLYPH_POLICY_MODE=consent",
+    "GLYPH_LOG_LEVEL=info",
+]
+
+[services.glyph.network]
+driver = "bolt"  # Use Bolt's QUIC networking
+subnet = "172.30.0.0/16"
+
+# Omen AI Router - Multi-provider routing with smart fallback
+[services.omen]
+image = "ghcr.io/ghostkellz/omen:latest"
+ports = ["3000:3000"]  # HTTP API endpoint
+environment = [
+    "OMEN_PORT=3000",
+    "OMEN_ROUTING_STRATEGY=cost-optimized",
+    "OMEN_ENABLE_CACHING=true",
+]
+depends_on = ["glyph"]
+
+[services.omen.providers]
+# Configure Omen providers
+anthropic_api_key = "${ANTHROPIC_API_KEY}"
+openai_api_key = "${OPENAI_API_KEY}"
+ollama_endpoint = "http://host.docker.internal:11434"  # Local Ollama
+
+[services.omen.network]
+driver = "bolt"
+subnet = "172.30.0.0/16"
+
+# Optional: GVault for encrypted secrets and caching
+[services.gvault]
+image = "ghcr.io/ghostkellz/gvault:latest"
+ports = ["8080:8080"]
+environment = [
+    "GVAULT_STORAGE_PATH=/data/vault",
+    "GVAULT_ENCRYPTION=aes-256-gcm",
+]
+volumes = ["gvault-data:/data/vault"]
+
+[services.gvault.network]
+driver = "bolt"
+subnet = "172.30.0.0/16"
+
+# Shared network for all services
+[networks.ai-network]
+driver = "bolt"
+subnet = "172.30.0.0/16"
+gateway = "172.30.0.1"
+
+# Persistent storage
+[volumes]
+glyph-data = { size = "1GB" }
+omen-cache = { size = "500MB" }
+gvault-data = { size = "2GB" }
+
+# Snapshots configuration
+[snapshots]
+enabled = true
+filesystem = "btrfs"
+
+[snapshots.retention]
+keep_daily = 7
+keep_weekly = 4
+max_total = 20
+
+[snapshots.triggers]
+before_surge_up = true
+min_change_threshold = "50MB"

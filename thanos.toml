@@ -1,0 +1,105 @@
+# Thanos Configuration
+# Talk to any AI provider like you're talking to Claude right now
+
+[general]
+debug = true
+preferred_provider = "anthropic"  # Which provider to use by default
+
+# Provider endpoints
+[endpoints]
+omen = "http://localhost:3000"
+ollama = "http://localhost:11434"
+bolt_grpc = "127.0.0.1:50051"
+
+# Direct API providers - configure API keys for direct access
+[providers.anthropic]
+enabled = true
+api_key = "${ANTHROPIC_API_KEY}"  # Or put your key here
+model = "claude-sonnet-4-20250514"  # Latest Sonnet
+endpoint = "https://api.anthropic.com/v1/messages"
+max_tokens = 4096
+temperature = 0.7
+
+[providers.openai]
+enabled = true
+api_key = "${OPENAI_API_KEY}"
+model = "gpt-4-turbo-preview"
+endpoint = "https://api.openai.com/v1/chat/completions"
+max_tokens = 4096
+temperature = 0.7
+
+[providers.xai]
+enabled = true
+api_key = "${XAI_API_KEY}"
+model = "grok-beta"
+endpoint = "https://api.x.ai/v1/chat/completions"
+max_tokens = 4096
+temperature = 0.7
+
+[providers.github_copilot]
+enabled = false  # Requires GitHub Copilot subscription
+# Uses GitHub's authentication, configured via gh CLI
+model = "gpt-4"
+temperature = 0.3  # Lower for code completion
+
+[providers.google]
+enabled = false
+api_key = "${GOOGLE_API_KEY}"
+model = "gemini-pro"
+endpoint = "https://generativelanguage.googleapis.com/v1beta/models"
+max_tokens = 4096
+temperature = 0.7
+
+[providers.ollama]
+enabled = true
+# Ollama is local, no API key needed
+model = "codellama:latest"  # Or mistral, llama2, etc.
+max_tokens = 2048
+temperature = 0.7
+
+[providers.omen]
+enabled = true
+# Omen does smart routing, it handles provider selection
+# But you can still specify preferences
+preferred_providers = ["anthropic", "openai", "xai"]
+routing_strategy = "cost-optimized"  # or "latency-optimized", "quality-optimized"
+
+# Conversation settings
+[conversation]
+system_prompt = "You are Thanos AI, a helpful coding assistant."
+context_window = 8000  # How much context to keep
+save_history = true
+history_file = "~/.config/thanos/history.json"
+
+# Chat UI preferences
+[ui]
+show_provider_badge = true  # Show which provider responded
+show_latency = true  # Show response time
+syntax_highlighting = true
+markdown_rendering = true
+
+# Cost tracking (optional)
+[budget]
+enabled = false
+daily_limit_usd = 10.00
+warn_at_percent = 80
+providers_cost_per_1k_tokens = { anthropic = 0.015, openai = 0.01, xai = 0.01 }
+
+# Advanced routing (when using Omen)
+[routing]
+# Route based on task type
+code_completion = "github_copilot"  # Fast for completions
+code_generation = "anthropic"  # Best for complex code
+chat = "xai"  # Conversational
+documentation = "openai"  # Good at docs
+
+# Fallback chain if preferred provider fails
+fallback_chain = ["anthropic", "openai", "xai", "ollama"]
+
+# Performance
+[performance]
+timeout_seconds = 30
+retry_attempts = 3
+connection_pool_size = 10
+enable_caching = true
+cache_ttl_minutes = 60
