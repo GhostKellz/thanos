@@ -8,12 +8,16 @@
 const std = @import("std");
 const types = @import("types.zig");
 const discovery = @import("discovery.zig");
+const health = @import("health.zig");
+const cost = @import("cost.zig");
+const streaming = @import("streaming.zig");
 const OmenClient = @import("clients/omen_client.zig").OmenClient;
 const OllamaClient = @import("clients/ollama_client.zig").OllamaClient;
 const BoltGrpcClient = @import("clients/bolt_grpc_client.zig").BoltGrpcClient;
 const AnthropicClient = @import("clients/anthropic_client.zig").AnthropicClient;
 const OpenAIClient = @import("clients/openai_client.zig").OpenAIClient;
 const XAIClient = @import("clients/xai_client.zig").XAIClient;
+const GitHubCopilotClient = @import("clients/github_copilot_client.zig").GitHubCopilotClient;
 
 pub const Thanos = struct {
     allocator: std.mem.Allocator,
@@ -26,9 +30,15 @@ pub const Thanos = struct {
     anthropic_client: ?AnthropicClient,
     openai_client: ?OpenAIClient,
     xai_client: ?XAIClient,
+    github_copilot_client: ?GitHubCopilotClient,
 
     // Discovery results
     discovery_result: ?discovery.DiscoveryResult,
+
+    // Health and cost monitoring
+    health_monitor: health.HealthMonitor,
+    cost_tracker: cost.CostTracker,
+    stream_manager: streaming.StreamManager,
 
     pub fn init(allocator: std.mem.Allocator, config: types.Config) !Thanos {
         if (config.debug) {
@@ -44,7 +54,11 @@ pub const Thanos = struct {
             .anthropic_client = null,
             .openai_client = null,
             .xai_client = null,
+            .github_copilot_client = null,
             .discovery_result = null,
+            .health_monitor = try health.HealthMonitor.init(allocator, .{}),
+            .cost_tracker = try cost.CostTracker.init(allocator, .{}),
+            .stream_manager = streaming.StreamManager.init(allocator, 10), // max 10 concurrent streams
         };
 
         // Run provider discovery
@@ -85,9 +99,18 @@ pub const Thanos = struct {
             client.deinit();
         }
 
+        if (self.github_copilot_client) |*client| {
+            client.deinit();
+        }
+
         if (self.discovery_result) |*result| {
             result.deinit();
         }
+
+        // Clean up monitoring systems
+        self.health_monitor.deinit();
+        self.cost_tracker.deinit();
+        self.stream_manager.deinit();
     }
 
     /// Discover available AI providers
@@ -143,6 +166,14 @@ pub const Thanos = struct {
             );
         }
 
+        if (self.config.github_copilot.enabled) {
+            self.github_copilot_client = try GitHubCopilotClient.init(
+                self.allocator,
+                self.config.github_copilot.api_key,
+                self.config.github_copilot.endpoint,
+            );
+        }
+
         // Always initialize Bolt gRPC client for MCP tools
         self.bolt_grpc_client = try BoltGrpcClient.init(self.allocator, self.config.bolt_grpc_endpoint);
         try self.bolt_grpc_client.?.connect();
@@ -154,40 +185,155 @@ pub const Thanos = struct {
             std.debug.print("[Thanos] 💬 Completion request: {s}\n", .{request.prompt});
         }
 
+        const start_time = std.time.milliTimestamp();
+
         // Routing strategy:
         // 1. If provider specified, use it directly
         // 2. If Omen available, use Omen (best routing)
         // 3. If Ollama available, use Ollama (fast local)
         // 4. Otherwise, return error
 
+        var response: types.CompletionResponse = undefined;
+
         if (request.provider) |provider| {
-            return self.completeWithProvider(provider, request);
-        }
-
-        // Try Omen first (intelligent routing)
-        if (self.omen_client) |*client| {
-            if (self.config.debug) {
-                std.debug.print("[Thanos] → Routing via Omen\n", .{});
+            response = try self.completeWithProvider(provider, request);
+        } else {
+            // Try Omen first (intelligent routing)
+            if (self.omen_client) |*client| {
+                if (self.config.debug) {
+                    std.debug.print("[Thanos] → Routing via Omen\n", .{});
+                }
+                response = try client.complete(request);
+            } else if (self.ollama_client) |*client| {
+                // Fall back to Ollama
+                if (self.config.debug) {
+                    std.debug.print("[Thanos] → Using Ollama (fallback)\n", .{});
+                }
+                response = try client.complete(request);
+            } else {
+                // No providers available
+                response = types.CompletionResponse{
+                    .text = try self.allocator.dupe(u8, ""),
+                    .provider = .omen,
+                    .confidence = 0.0,
+                    .latency_ms = 0,
+                    .success = false,
+                    .error_message = try self.allocator.dupe(u8, "No AI providers available"),
+                };
             }
-            return client.complete(request);
         }
 
-        // Fall back to Ollama
+        // Record health and cost metrics
+        const latency = @as(u32, @intCast(std.time.milliTimestamp() - start_time));
+        if (response.success) {
+            try self.health_monitor.recordSuccess(response.provider, latency);
+
+            // Track cost (estimate tokens from response length)
+            const estimated_tokens = @as(u64, @intCast(response.text.len / 4)); // Rough estimate
+            try self.cost_tracker.recordRequest(response.provider, estimated_tokens, estimated_tokens / 2);
+        } else {
+            const error_msg = response.error_message orelse "Unknown error";
+            try self.health_monitor.recordFailure(response.provider, error_msg);
+        }
+
+        return response;
+    }
+
+    /// Complete a prompt with streaming response
+    pub fn completeStreaming(self: *Thanos, request: types.StreamingCompletionRequest) !types.StreamingCompletionResponse {
+        if (self.config.debug) {
+            std.debug.print("[Thanos] 🌊 Streaming completion request: {s}\n", .{request.prompt});
+        }
+
+        // Routing strategy for streaming:
+        // 1. If provider specified, use it directly
+        // 2. If Ollama available, use Ollama (has native streaming)
+        // 3. If Anthropic available, use Anthropic (supports streaming)
+        // 4. Otherwise, fall back to non-streaming
+
+        if (request.provider) |provider| {
+            return self.completeStreamingWithProvider(provider, request);
+        }
+
+        // Try Ollama first (excellent streaming support)
         if (self.ollama_client) |*client| {
             if (self.config.debug) {
-                std.debug.print("[Thanos] → Using Ollama (fallback)\n", .{});
+                std.debug.print("[Thanos] → Streaming via Ollama\n", .{});
             }
-            return client.complete(request);
+            return client.completeStreaming(request);
         }
 
-        // No providers available
-        return types.CompletionResponse{
-            .text = try self.allocator.dupe(u8, ""),
-            .provider = .omen, // Doesn't matter
-            .confidence = 0.0,
+        // Try Anthropic second (also has streaming)
+        if (self.anthropic_client) |*client| {
+            if (self.config.debug) {
+                std.debug.print("[Thanos] → Streaming via Anthropic\n", .{});
+            }
+            return client.completeStreaming(request);
+        }
+
+        // No streaming providers available
+        return types.StreamingCompletionResponse{
+            .provider = .omen,
+            .total_tokens = 0,
             .latency_ms = 0,
             .success = false,
-            .error_message = try self.allocator.dupe(u8, "No AI providers available"),
+            .error_message = try self.allocator.dupe(u8, "No streaming providers available"),
+        };
+    }
+
+    /// Complete streaming with a specific provider
+    fn completeStreamingWithProvider(self: *Thanos, provider: types.Provider, request: types.StreamingCompletionRequest) !types.StreamingCompletionResponse {
+        return switch (provider) {
+            .ollama => blk: {
+                const client = self.ollama_client orelse {
+                    break :blk types.StreamingCompletionResponse{
+                        .provider = .ollama,
+                        .total_tokens = 0,
+                        .latency_ms = 0,
+                        .success = false,
+                        .error_message = try self.allocator.dupe(u8, "Ollama not available"),
+                    };
+                };
+                var mut_client = client;
+                break :blk try mut_client.completeStreaming(request);
+            },
+            .anthropic => blk: {
+                const client = self.anthropic_client orelse {
+                    break :blk types.StreamingCompletionResponse{
+                        .provider = .anthropic,
+                        .total_tokens = 0,
+                        .latency_ms = 0,
+                        .success = false,
+                        .error_message = try self.allocator.dupe(u8, "Anthropic not available"),
+                    };
+                };
+                var mut_client = client;
+                break :blk try mut_client.completeStreaming(request);
+            },
+            .github_copilot => blk: {
+                const client = self.github_copilot_client orelse {
+                    break :blk types.StreamingCompletionResponse{
+                        .provider = .github_copilot,
+                        .total_tokens = 0,
+                        .latency_ms = 0,
+                        .success = false,
+                        .error_message = try self.allocator.dupe(u8, "GitHub Copilot not available"),
+                    };
+                };
+                var mut_client = client;
+                break :blk try mut_client.completeStreaming(request);
+            },
+            else => types.StreamingCompletionResponse{
+                .provider = provider,
+                .total_tokens = 0,
+                .latency_ms = 0,
+                .success = false,
+                .error_message = try std.fmt.allocPrint(
+                    self.allocator,
+                    "Streaming not supported for provider {s}",
+                    .{provider.toString()},
+                ),
+            },
         };
     }
 
@@ -264,6 +410,20 @@ pub const Thanos = struct {
                 var mut_client = client;
                 break :blk try mut_client.complete(request);
             },
+            .github_copilot => blk: {
+                const client = self.github_copilot_client orelse {
+                    break :blk types.CompletionResponse{
+                        .text = try self.allocator.dupe(u8, ""),
+                        .provider = .github_copilot,
+                        .confidence = 0.0,
+                        .latency_ms = 0,
+                        .success = false,
+                        .error_message = try self.allocator.dupe(u8, "GitHub Copilot not configured"),
+                    };
+                };
+                var mut_client = client;
+                break :blk try mut_client.complete(request);
+            },
             else => types.CompletionResponse{
                 .text = try self.allocator.dupe(u8, ""),
                 .provider = provider,
@@ -317,8 +477,59 @@ pub const Thanos = struct {
         if (self.anthropic_client != null) stats.providers_available += 1;
         if (self.openai_client != null) stats.providers_available += 1;
         if (self.xai_client != null) stats.providers_available += 1;
+        if (self.github_copilot_client != null) stats.providers_available += 1;
 
         return stats;
+    }
+
+    /// Get health monitor reference
+    pub fn getHealthMonitor(self: *Thanos) *health.HealthMonitor {
+        return &self.health_monitor;
+    }
+
+    /// Get cost tracker reference
+    pub fn getCostTracker(self: *Thanos) *cost.CostTracker {
+        return &self.cost_tracker;
+    }
+
+    /// Get stream manager reference
+    pub fn getStreamManager(self: *Thanos) *streaming.StreamManager {
+        return &self.stream_manager;
+    }
+
+    /// Get health report for all providers
+    pub fn getHealthReport(self: *Thanos) ![]const u8 {
+        return try self.health_monitor.getHealthReport(self.allocator);
+    }
+
+    /// Get health check results for all providers
+    pub fn getAllHealth(self: *Thanos) ![]health.HealthCheckResult {
+        return try self.health_monitor.getAllHealth();
+    }
+
+    /// Get cost report
+    pub fn getCostReport(self: *Thanos) ![]const u8 {
+        return try self.cost_tracker.getCostReport(self.allocator);
+    }
+
+    /// Get total cost
+    pub fn getTotalCost(self: *Thanos) f64 {
+        return self.cost_tracker.getTotalCost();
+    }
+
+    /// Get budget usage
+    pub fn getBudgetUsage(self: *Thanos) cost.BudgetUsage {
+        return self.cost_tracker.getBudgetUsage();
+    }
+
+    /// Check if a provider is healthy
+    pub fn isProviderHealthy(self: *Thanos, provider: types.Provider) bool {
+        return self.health_monitor.isHealthy(provider);
+    }
+
+    /// Get provider health status
+    pub fn getProviderHealth(self: *Thanos, provider: types.Provider) ?health.ProviderHealth {
+        return self.health_monitor.getProviderHealth(provider);
     }
 };
 

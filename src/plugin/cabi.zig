@@ -263,6 +263,151 @@ export fn thanos_get_stats() ?[*:0]u8 {
 }
 
 // ============================================================================
+// Health Monitoring API
+// ============================================================================
+
+/// Get health report for all providers
+///
+/// Returns: Health report as text (caller must free with thanos_free_string)
+///          Returns NULL on error
+export fn thanos_get_health_report() ?[*:0]u8 {
+    const t = plugin_thanos orelse return null;
+
+    const report = t.getHealthReport() catch return null;
+    defer plugin_allocator.free(report);
+
+    const result = plugin_allocator.dupeZ(u8, report) catch return null;
+    return result.ptr;
+}
+
+/// Check if a provider is healthy
+///
+/// provider_name: "omen", "ollama", "anthropic", "openai", etc.
+/// Returns: 1 if healthy, 0 if unhealthy, -1 on error
+export fn thanos_is_provider_healthy(provider_name: [*:0]const u8) c_int {
+    const t = plugin_thanos orelse return -1;
+
+    const provider = parseProvider(std.mem.span(provider_name)) orelse return -1;
+    const is_healthy = t.isProviderHealthy(provider);
+
+    return if (is_healthy) 1 else 0;
+}
+
+/// Get health data for all providers as JSON
+///
+/// Returns: JSON array of health check results
+export fn thanos_get_all_health_json() ?[*:0]u8 {
+    const t = plugin_thanos orelse return null;
+
+    const health_results = t.getAllHealth() catch return null;
+    defer plugin_allocator.free(health_results);
+
+    var parts: std.ArrayList([]const u8) = .{ .items = &[_][]const u8{}, .capacity = 0 };
+    defer {
+        for (parts.items) |part| {
+            plugin_allocator.free(part);
+        }
+        parts.deinit(plugin_allocator);
+    }
+
+    parts.append(plugin_allocator, "[") catch return null;
+
+    for (health_results, 0..) |result, i| {
+        if (i > 0) {
+            parts.append(plugin_allocator, ",") catch return null;
+        }
+
+        const entry = std.fmt.allocPrint(
+            plugin_allocator,
+            \\{{"provider":"{s}","available":{s},"latency_ms":{},"success_rate":{d:.2}}}
+        ,
+            .{
+                result.provider.toString(),
+                if (result.available) "true" else "false",
+                result.latency_ms,
+                result.success_rate,
+            },
+        ) catch return null;
+
+        parts.append(plugin_allocator, entry) catch return null;
+    }
+
+    parts.append(plugin_allocator, "]") catch return null;
+
+    // Combine all parts
+    var total_len: usize = 0;
+    for (parts.items) |part| {
+        total_len += part.len;
+    }
+
+    const combined = plugin_allocator.alloc(u8, total_len) catch return null;
+    var pos: usize = 0;
+    for (parts.items) |part| {
+        @memcpy(combined[pos..][0..part.len], part);
+        pos += part.len;
+    }
+
+    const result = plugin_allocator.dupeZ(u8, combined) catch return null;
+    plugin_allocator.free(combined);
+    return result.ptr;
+}
+
+// ============================================================================
+// Cost Tracking API
+// ============================================================================
+
+/// Get cost report
+///
+/// Returns: Cost report as text (caller must free with thanos_free_string)
+///          Returns NULL on error
+export fn thanos_get_cost_report() ?[*:0]u8 {
+    const t = plugin_thanos orelse return null;
+
+    const report = t.getCostReport() catch return null;
+    defer plugin_allocator.free(report);
+
+    const result = plugin_allocator.dupeZ(u8, report) catch return null;
+    return result.ptr;
+}
+
+/// Get total cost
+///
+/// Returns: Total cost in USD (multiplied by 10000 to avoid floats in C API)
+///          e.g., $12.34 = 123400
+export fn thanos_get_total_cost() c_int {
+    const t = plugin_thanos orelse return -1;
+
+    const cost = t.getTotalCost();
+    const cost_cents = @as(c_int, @intFromFloat(cost * 10000.0));
+
+    return cost_cents;
+}
+
+/// Get budget usage as JSON
+///
+/// Returns: JSON like {"daily": 45.5, "monthly": 23.1}
+export fn thanos_get_budget_usage_json() ?[*:0]u8 {
+    const t = plugin_thanos orelse return null;
+
+    const usage = t.getBudgetUsage();
+
+    const json = std.fmt.allocPrint(
+        plugin_allocator,
+        \\{{"daily":{d:.1},"monthly":{d:.1}}}
+    ,
+        .{
+            usage.daily,
+            usage.monthly,
+        },
+    ) catch return null;
+
+    const json_z = plugin_allocator.dupeZ(u8, json) catch return null;
+    plugin_allocator.free(json);
+
+    return json_z.ptr;
+}
+
+// ============================================================================
 // Memory Management
 // ============================================================================
 

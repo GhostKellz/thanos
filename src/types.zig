@@ -89,6 +89,40 @@ pub const CompletionResponse = struct {
     }
 };
 
+/// Streaming chunk callback function type
+pub const StreamCallback = *const fn (chunk: []const u8, user_data: ?*anyopaque) void;
+
+/// Streaming completion request
+pub const StreamingCompletionRequest = struct {
+    prompt: []const u8,
+    language: ?[]const u8 = null,
+    provider: ?Provider = null,
+    max_tokens: ?u32 = null,
+    temperature: ?f32 = null,
+    system_prompt: ?[]const u8 = null,
+
+    /// Callback function called for each chunk
+    callback: StreamCallback,
+
+    /// User data passed to callback
+    user_data: ?*anyopaque = null,
+};
+
+/// Streaming response metadata (final result after streaming completes)
+pub const StreamingCompletionResponse = struct {
+    provider: Provider,
+    total_tokens: u32,
+    latency_ms: u32,
+    success: bool,
+    error_message: ?[]const u8 = null,
+
+    pub fn deinit(self: StreamingCompletionResponse, allocator: std.mem.Allocator) void {
+        if (self.error_message) |msg| {
+            allocator.free(msg);
+        }
+    }
+};
+
 /// MCP Tool request
 pub const ToolRequest = struct {
     tool_name: []const u8,
@@ -121,8 +155,65 @@ pub const ProviderConfig = struct {
     temperature: ?f32 = null,
 };
 
+/// Configuration mode for AI routing
+pub const ConfigMode = enum {
+    ollama_heavy, // Local-first, economical
+    api_heavy, // Cloud-first, maximum quality
+    hybrid, // Balanced (default)
+    custom, // User-defined routing
+
+    pub fn toString(self: ConfigMode) []const u8 {
+        return switch (self) {
+            .ollama_heavy => "ollama-heavy",
+            .api_heavy => "api-heavy",
+            .hybrid => "hybrid",
+            .custom => "custom",
+        };
+    }
+
+    pub fn fromString(str: []const u8) ?ConfigMode {
+        if (std.mem.eql(u8, str, "ollama-heavy")) return .ollama_heavy;
+        if (std.mem.eql(u8, str, "api-heavy")) return .api_heavy;
+        if (std.mem.eql(u8, str, "hybrid")) return .hybrid;
+        if (std.mem.eql(u8, str, "custom")) return .custom;
+        return null;
+    }
+};
+
+/// Task type for intelligent routing
+pub const TaskType = enum {
+    completion,
+    chat,
+    review,
+    explain,
+    refactor,
+    commit_msg,
+    semantic_search,
+
+    pub fn toString(self: TaskType) []const u8 {
+        return switch (self) {
+            .completion => "completion",
+            .chat => "chat",
+            .review => "review",
+            .explain => "explain",
+            .refactor => "refactor",
+            .commit_msg => "commit_msg",
+            .semantic_search => "semantic_search",
+        };
+    }
+};
+
+/// Routing configuration for a specific task type
+pub const TaskRouting = struct {
+    primary: Provider,
+    fallback: ?Provider = null,
+};
+
 /// Thanos configuration
 pub const Config = struct {
+    /// Configuration mode
+    mode: ConfigMode = .hybrid,
+
     /// Omen endpoint (optional - will auto-detect if not provided)
     omen_endpoint: ?[]const u8 = null,
 
@@ -137,6 +228,9 @@ pub const Config = struct {
 
     /// Fallback providers to try if preferred fails
     fallback_providers: []const Provider = &.{.ollama},
+
+    /// Task-specific routing (for hybrid/custom modes)
+    task_routing: std.AutoHashMap(TaskType, TaskRouting) = undefined,
 
     /// Provider-specific configs
     anthropic: ProviderConfig = .{},
@@ -157,4 +251,66 @@ pub const Config = struct {
 
     /// Config file path (if loading from TOML)
     config_file: ?[]const u8 = null,
+
+    /// Initialize with default task routing
+    pub fn initTaskRouting(self: *Config, allocator: std.mem.Allocator) !void {
+        self.task_routing = std.AutoHashMap(TaskType, TaskRouting).init(allocator);
+
+        // Default routing based on mode
+        switch (self.mode) {
+            .ollama_heavy => {
+                try self.task_routing.put(.completion, .{ .primary = .ollama });
+                try self.task_routing.put(.chat, .{ .primary = .ollama });
+                try self.task_routing.put(.review, .{ .primary = .ollama, .fallback = .anthropic });
+                try self.task_routing.put(.explain, .{ .primary = .ollama });
+                try self.task_routing.put(.refactor, .{ .primary = .ollama, .fallback = .anthropic });
+                try self.task_routing.put(.commit_msg, .{ .primary = .ollama });
+                try self.task_routing.put(.semantic_search, .{ .primary = .ollama });
+            },
+            .api_heavy => {
+                try self.task_routing.put(.completion, .{ .primary = .github_copilot, .fallback = .anthropic });
+                try self.task_routing.put(.chat, .{ .primary = .anthropic });
+                try self.task_routing.put(.review, .{ .primary = .anthropic, .fallback = .openai });
+                try self.task_routing.put(.explain, .{ .primary = .anthropic });
+                try self.task_routing.put(.refactor, .{ .primary = .anthropic });
+                try self.task_routing.put(.commit_msg, .{ .primary = .github_copilot, .fallback = .anthropic });
+                try self.task_routing.put(.semantic_search, .{ .primary = .anthropic });
+            },
+            .hybrid => {
+                try self.task_routing.put(.completion, .{ .primary = .ollama, .fallback = .github_copilot });
+                try self.task_routing.put(.chat, .{ .primary = .ollama, .fallback = .anthropic });
+                try self.task_routing.put(.review, .{ .primary = .ollama, .fallback = .anthropic });
+                try self.task_routing.put(.explain, .{ .primary = .ollama });
+                try self.task_routing.put(.refactor, .{ .primary = .ollama, .fallback = .anthropic });
+                try self.task_routing.put(.commit_msg, .{ .primary = .ollama });
+                try self.task_routing.put(.semantic_search, .{ .primary = .ollama, .fallback = .anthropic });
+            },
+            .custom => {
+                // Custom routing loaded from config file
+            },
+        }
+    }
+
+    pub fn deinit(self: *Config, allocator: std.mem.Allocator) void {
+        if (self.omen_endpoint) |endpoint| allocator.free(endpoint);
+        if (self.ollama_endpoint) |endpoint| allocator.free(endpoint);
+        if (self.config_file) |path| allocator.free(path);
+
+        // Free provider configs
+        inline for (.{ "anthropic", "openai", "xai", "github_copilot", "google", "ollama_config" }) |field_name| {
+            const provider_config = @field(self, field_name);
+            if (provider_config.api_key) |key| allocator.free(key);
+            if (provider_config.model) |model| allocator.free(model);
+            if (provider_config.endpoint) |endpoint| allocator.free(endpoint);
+        }
+
+        // Free task routing
+        if (self.task_routing.count() > 0) {
+            self.task_routing.deinit();
+        }
+
+        if (self.fallback_providers.len > 0) {
+            allocator.free(self.fallback_providers);
+        }
+    }
 };

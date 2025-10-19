@@ -12,9 +12,16 @@ pub const config = @import("config.zig");
 pub const errors = @import("errors.zig");
 pub const cache = @import("cache.zig");
 pub const retry = @import("retry.zig");
+pub const router = @import("router.zig");
+pub const health = @import("health.zig");
+pub const cost = @import("cost.zig");
+pub const streaming = @import("streaming.zig");
 const thanos_mod = @import("thanos.zig");
 pub const Thanos = thanos_mod.Thanos;
 pub const ThanosStats = thanos_mod.ThanosStats;
+pub const ProviderRouter = router.ProviderRouter;
+pub const HealthMonitor = health.HealthMonitor;
+pub const CostTracker = cost.CostTracker;
 
 // Re-export clients
 pub const OmenClient = @import("clients/omen_client.zig").OmenClient;

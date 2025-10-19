@@ -1,0 +1,45 @@
+# Thanos Hybrid Configuration Example
+# ~/.config/thanos/config.toml
+
+[ai]
+# Mode: ollama-heavy, api-heavy, hybrid, or custom
+mode = "hybrid"
+primary_provider = "ollama"
+
+[general]
+debug = false
+request_timeout_ms = 30000
+
+[providers.ollama]
+enabled = true
+endpoint = "http://localhost:11434"
+model = "codellama:13b"
+max_tokens = 2048
+
+[providers.anthropic]
+enabled = true
+api_key = "${ANTHROPIC_API_KEY}"
+model = "claude-3-5-sonnet-20241022"
+max_tokens = 4096
+temperature = 0.7
+
+[providers.openai]
+enabled = false
+api_key = "${OPENAI_API_KEY}"
+model = "gpt-4-turbo-2024-04-09"
+
+[providers.github_copilot]
+enabled = true
+# Uses GitHub CLI auth automatically
+
+[providers.xai]
+enabled = false
+api_key = "${XAI_API_KEY}"
+model = "grok-beta"
+
+[routing]
+fallback_chain = ["ollama", "anthropic", "openai"]
+
+[discovery]
+ollama_endpoint = "http://localhost:11434"
+omen_endpoint = "http://localhost:8080"

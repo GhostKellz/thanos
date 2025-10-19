@@ -184,4 +184,128 @@ pub const OllamaClient = struct {
 
         return try self.allocator.dupe(u8, parsed.value.response);
     }
+
+    /// Complete a prompt using Ollama with streaming
+    pub fn completeStreaming(self: *OllamaClient, request: types.StreamingCompletionRequest) !types.StreamingCompletionResponse {
+        const start_time = std.time.milliTimestamp();
+
+        // Build Ollama API request with streaming enabled
+        const api_url = try std.fmt.allocPrint(
+            self.allocator,
+            "{s}/api/generate",
+            .{self.endpoint},
+        );
+        defer self.allocator.free(api_url);
+
+        // Create JSON request body with stream: true
+        const request_body = try std.fmt.allocPrint(
+            self.allocator,
+            \\{{"model":"{s}","prompt":"{s}","stream":true,"options":{{"num_predict":{}}}}}
+        ,
+            .{
+                self.model,
+                request.prompt,
+                request.max_tokens orelse 100,
+            },
+        );
+        defer self.allocator.free(request_body);
+
+        // Build HTTP POST request
+        var http_request = zhttp.Request.init(self.allocator, .POST, api_url);
+        defer http_request.deinit();
+        http_request.setBody(zhttp.Body.fromString(request_body));
+        try http_request.addHeader("Content-Type", "application/json");
+
+        // Make HTTP POST request
+        var response = self.client.send(http_request) catch |err| {
+            const latency = @as(u32, @intCast(std.time.milliTimestamp() - start_time));
+            return types.StreamingCompletionResponse{
+                .provider = .ollama,
+                .total_tokens = 0,
+                .latency_ms = latency,
+                .success = false,
+                .error_message = try std.fmt.allocPrint(
+                    self.allocator,
+                    "Ollama HTTP error: {s}",
+                    .{@errorName(err)},
+                ),
+            };
+        };
+        defer response.deinit();
+
+        // Read streaming response line by line
+        // Ollama streams newline-delimited JSON
+        var total_tokens: u32 = 0;
+        var buffer: [4096]u8 = undefined;
+
+        while (true) {
+            const line = response.readLine(&buffer) catch |err| {
+                if (err == error.EndOfStream) break;
+                const latency = @as(u32, @intCast(std.time.milliTimestamp() - start_time));
+                return types.StreamingCompletionResponse{
+                    .provider = .ollama,
+                    .total_tokens = total_tokens,
+                    .latency_ms = latency,
+                    .success = false,
+                    .error_message = try std.fmt.allocPrint(
+                        self.allocator,
+                        "Stream read error: {s}",
+                        .{@errorName(err)},
+                    ),
+                };
+            };
+
+            if (line.len == 0) continue;
+
+            // Parse streaming chunk
+            const chunk = try self.parseStreamingChunk(line);
+            defer if (chunk.text) |text| self.allocator.free(text);
+
+            if (chunk.text) |text| {
+                // Call user callback with chunk
+                request.callback(text, request.user_data);
+                total_tokens += @intCast(text.len / 4); // Rough token estimate
+            }
+
+            if (chunk.done) break;
+        }
+
+        const latency = @as(u32, @intCast(std.time.milliTimestamp() - start_time));
+
+        return types.StreamingCompletionResponse{
+            .provider = .ollama,
+            .total_tokens = total_tokens,
+            .latency_ms = latency,
+            .success = true,
+            .error_message = null,
+        };
+    }
+
+    const StreamingChunk = struct {
+        text: ?[]const u8,
+        done: bool,
+    };
+
+    fn parseStreamingChunk(self: *OllamaClient, json_text: []const u8) !StreamingChunk {
+        const parsed = std.json.parseFromSlice(
+            OllamaResponse,
+            self.allocator,
+            json_text,
+            .{},
+        ) catch |err| {
+            std.debug.print("[OllamaClient] Streaming chunk parse error: {s}\n", .{@errorName(err)});
+            return StreamingChunk{ .text = null, .done = true };
+        };
+        defer parsed.deinit();
+
+        const text = if (parsed.value.response.len > 0)
+            try self.allocator.dupe(u8, parsed.value.response)
+        else
+            null;
+
+        return StreamingChunk{
+            .text = text,
+            .done = parsed.value.done,
+        };
+    }
 };

@@ -24,7 +24,22 @@ pub fn loadConfig(allocator: std.mem.Allocator, path: []const u8) !types.Config 
     // Initialize config with defaults
     var config = types.Config{};
 
-    // Parse general section
+    // Parse [ai] section for hybrid configuration
+    if (zontom.getTable(&toml, "ai")) |ai| {
+        if (zontom.getString(ai, "mode")) |mode_str| {
+            if (types.ConfigMode.fromString(mode_str)) |mode| {
+                config.mode = mode;
+            }
+        }
+
+        if (zontom.getString(ai, "primary_provider")) |pref_str| {
+            if (types.Provider.fromString(pref_str)) |provider| {
+                config.preferred_provider = provider;
+            }
+        }
+    }
+
+    // Parse general section (legacy support)
     if (zontom.getTable(&toml, "general")) |general| {
         if (zontom.getBool(general, "debug")) |debug| {
             config.debug = debug;
@@ -111,6 +126,9 @@ pub fn loadConfig(allocator: std.mem.Allocator, path: []const u8) !types.Config 
             config.bolt_grpc_endpoint = expanded;
         }
     }
+
+    // Initialize task routing based on mode
+    try config.initTaskRouting(allocator);
 
     return config;
 }

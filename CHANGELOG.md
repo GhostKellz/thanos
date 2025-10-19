@@ -8,9 +8,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Streaming response support (in progress)
-- Cost tracking and budgets
-- Provider health monitoring
+- Cost tracking and budgets (planned for v0.3.0)
+- Provider health monitoring (planned for v0.3.0)
+- Comprehensive test suite (in progress)
+
+## [0.2.0] - 2025-10-18
+
+### Added
+- ✅ **Streaming response support** - Real-time token streaming for Ollama, Anthropic, and GitHub Copilot
+- ✅ **GitHub Copilot integration** - Native code completions via gh CLI authentication
+- ✅ **Fixed TOML parser** - Updated zontom to v0.1.0 with multiline string support
+- Streaming API with callback-based architecture
+- Server-Sent Events (SSE) support for Anthropic and GitHub Copilot
+- Newline-delimited JSON streaming for Ollama
+- GPT-5 Codex support structure (ready when API is available)
+
+### Fixed
+- TOML multiline string parsing (integer overflow in lexer)
+- GitHub Copilot authentication via gh CLI
+
+### Developer Experience
+- New example: `examples/streaming_completion.zig`
+- Complete Phase 1 documentation
+- Progress tracking in `archive/PHASE_1_PROGRESS.md`
 
 ## [0.1.0] - 2025-10-18
 

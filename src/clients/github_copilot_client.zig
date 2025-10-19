@@ -1,53 +1,78 @@
-//! Anthropic Claude client for direct API access
-//! Implements real HTTP API calls to Anthropic's Claude API
+// GitHub Copilot client for native code completions
+//! Implements GitHub Copilot API integration via gh auth token
 const std = @import("std");
 const zhttp = @import("zhttp");
 const types = @import("../types.zig");
 
-pub const AnthropicClient = struct {
+pub const GitHubCopilotClient = struct {
     allocator: std.mem.Allocator,
-    api_key: []const u8,
-    model: []const u8,
+    api_token: []const u8,
     endpoint: []const u8,
     client: zhttp.Client,
 
-    pub fn init(allocator: std.mem.Allocator, api_key: []const u8, model: ?[]const u8, endpoint: ?[]const u8) !AnthropicClient {
-        return AnthropicClient{
+    /// Initialize GitHub Copilot client
+    /// Uses gh CLI auth token or provided API token
+    pub fn init(allocator: std.mem.Allocator, api_token: ?[]const u8, endpoint: ?[]const u8) !GitHubCopilotClient {
+        // If no token provided, try to get from gh CLI
+        const token = if (api_token) |t|
+            try allocator.dupe(u8, t)
+        else
+            try getGHToken(allocator);
+
+        return GitHubCopilotClient{
             .allocator = allocator,
-            .api_key = api_key,
-            .model = model orelse "claude-sonnet-4-20250514",
-            .endpoint = endpoint orelse "https://api.anthropic.com/v1/messages",
+            .api_token = token,
+            .endpoint = endpoint orelse "https://api.githubcopilot.com/v1/completions",
             .client = zhttp.Client.init(allocator, .{}),
         };
     }
 
-    pub fn deinit(self: *AnthropicClient) void {
+    pub fn deinit(self: *GitHubCopilotClient) void {
+        self.allocator.free(self.api_token);
         self.client.deinit();
     }
 
-    /// Complete a prompt using Anthropic Claude
-    pub fn complete(self: *AnthropicClient, request: types.CompletionRequest) !types.CompletionResponse {
+    /// Get GitHub token from gh CLI
+    fn getGHToken(allocator: std.mem.Allocator) ![]const u8 {
+        // Try to execute: gh auth token
+        const result = try std.process.Child.run(.{
+            .allocator = allocator,
+            .argv = &.{ "gh", "auth", "token" },
+        });
+        defer allocator.free(result.stdout);
+        defer allocator.free(result.stderr);
+
+        if (result.term.Exited != 0) {
+            return error.GhAuthFailed;
+        }
+
+        // Trim whitespace
+        const trimmed = std.mem.trim(u8, result.stdout, &std.ascii.whitespace);
+        return try allocator.dupe(u8, trimmed);
+    }
+
+    /// Complete code using GitHub Copilot
+    pub fn complete(self: *GitHubCopilotClient, request: types.CompletionRequest) !types.CompletionResponse {
         const start_time = std.time.milliTimestamp();
 
-        // Build request body for Anthropic Messages API
+        // GitHub Copilot API request format
         // {
-        //   "model": "claude-sonnet-4-20250514",
-        //   "max_tokens": 1024,
-        //   "messages": [
-        //     {"role": "user", "content": "Hello, Claude"}
-        //   ]
+        //   "prompt": "code context",
+        //   "suffix": "code after cursor",
+        //   "max_tokens": 100,
+        //   "temperature": 0.0,
+        //   "language": "zig"
         // }
-        const system_prompt = request.system_prompt orelse "You are a helpful coding assistant.";
 
         const request_body = try std.fmt.allocPrint(
             self.allocator,
-            \\{{"model":"{s}","max_tokens":{},"system":"{s}","messages":[{{"role":"user","content":"{s}"}}]}}
+            \\{{"prompt":"{s}","suffix":"","max_tokens":{},"temperature":{},"language":"{s}"}}
         ,
             .{
-                self.model,
-                request.max_tokens orelse 1024,
-                system_prompt,
                 request.prompt,
+                request.max_tokens orelse 100,
+                request.temperature orelse 0.2,
+                request.language orelse "plaintext",
             },
         );
         defer self.allocator.free(request_body);
@@ -57,23 +82,27 @@ pub const AnthropicClient = struct {
         defer http_request.deinit();
         http_request.setBody(zhttp.Body.fromString(request_body));
 
-        // Anthropic-specific headers
         try http_request.addHeader("Content-Type", "application/json");
-        try http_request.addHeader("x-api-key", self.api_key);
-        try http_request.addHeader("anthropic-version", "2023-06-01");
+        try http_request.addHeader("Authorization", try std.fmt.allocPrint(
+            self.allocator,
+            "Bearer {s}",
+            .{self.api_token},
+        ));
+        try http_request.addHeader("Editor-Version", "Grim/0.1.0");
+        try http_request.addHeader("Editor-Plugin-Version", "Thanos/0.2.0");
 
         // Make HTTP POST request
         var response = self.client.send(http_request) catch |err| {
             const latency = @as(u32, @intCast(std.time.milliTimestamp() - start_time));
             return types.CompletionResponse{
                 .text = try self.allocator.dupe(u8, ""),
-                .provider = .anthropic,
+                .provider = .github_copilot,
                 .confidence = 0.0,
                 .latency_ms = latency,
                 .success = false,
                 .error_message = try std.fmt.allocPrint(
                     self.allocator,
-                    "Anthropic HTTP error: {s}",
+                    "GitHub Copilot HTTP error: {s}",
                     .{@errorName(err)},
                 ),
             };
@@ -85,7 +114,7 @@ pub const AnthropicClient = struct {
             const latency = @as(u32, @intCast(std.time.milliTimestamp() - start_time));
             return types.CompletionResponse{
                 .text = try self.allocator.dupe(u8, ""),
-                .provider = .anthropic,
+                .provider = .github_copilot,
                 .confidence = 0.0,
                 .latency_ms = latency,
                 .success = false,
@@ -100,19 +129,16 @@ pub const AnthropicClient = struct {
 
         // Parse JSON response
         // {
-        //   "id": "msg_...",
-        //   "type": "message",
-        //   "role": "assistant",
-        //   "content": [
-        //     {"type": "text", "text": "Hello! How can I help you today?"}
-        //   ],
-        //   "model": "claude-sonnet-4-20250514",
-        //   "stop_reason": "end_turn",
-        //   "usage": {...}
+        //   "choices": [
+        //     {
+        //       "text": "completion text",
+        //       "index": 0,
+        //       "finish_reason": "stop"
+        //     }
+        //   ]
         // }
 
-        // Extract text from content array
-        const completion_text = try self.extractTextFromContent(response_body);
+        const completion_text = try self.parseCompletionResponse(response_body);
         defer if (completion_text) |text| self.allocator.free(text);
 
         const latency = @as(u32, @intCast(std.time.milliTimestamp() - start_time));
@@ -120,8 +146,8 @@ pub const AnthropicClient = struct {
         if (completion_text) |text| {
             return types.CompletionResponse{
                 .text = try self.allocator.dupe(u8, text),
-                .provider = .anthropic,
-                .confidence = 0.95, // Claude is high quality
+                .provider = .github_copilot,
+                .confidence = 0.9, // Copilot is high quality
                 .latency_ms = latency,
                 .success = true,
                 .error_message = null,
@@ -129,22 +155,22 @@ pub const AnthropicClient = struct {
         } else {
             return types.CompletionResponse{
                 .text = try self.allocator.dupe(u8, ""),
-                .provider = .anthropic,
+                .provider = .github_copilot,
                 .confidence = 0.0,
                 .latency_ms = latency,
                 .success = false,
-                .error_message = try self.allocator.dupe(u8, "Failed to parse Anthropic response"),
+                .error_message = try self.allocator.dupe(u8, "Failed to parse GitHub Copilot response"),
             };
         }
     }
 
-    /// Check if Anthropic API is accessible
-    pub fn ping(self: *AnthropicClient) !bool {
-        // Anthropic doesn't have a dedicated health endpoint
-        // We can check if the API key is valid by making a minimal request
+    /// Check if GitHub Copilot is accessible
+    pub fn ping(self: *GitHubCopilotClient) !bool {
+        // Simple ping with minimal request
         const test_request = types.CompletionRequest{
-            .prompt = "Hi",
+            .prompt = "//",
             .max_tokens = 1,
+            .language = "javascript",
         };
 
         const response = self.complete(test_request) catch return false;
@@ -153,98 +179,82 @@ pub const AnthropicClient = struct {
         return response.success;
     }
 
-    /// Parse Anthropic JSON response using std.json
-    const AnthropicContent = struct {
-        type: []const u8,
+    const CopilotChoice = struct {
         text: []const u8,
+        index: ?i32 = null,
+        finish_reason: ?[]const u8 = null,
     };
 
-    const AnthropicUsage = struct {
-        input_tokens: ?i32 = null,
-        output_tokens: ?i32 = null,
-    };
-
-    const AnthropicResponse = struct {
+    const CopilotResponse = struct {
+        choices: []CopilotChoice,
         id: ?[]const u8 = null,
-        type: ?[]const u8 = null,
-        role: ?[]const u8 = null,
-        content: []AnthropicContent,
         model: ?[]const u8 = null,
-        stop_reason: ?[]const u8 = null,
-        usage: ?AnthropicUsage = null,
     };
 
-    fn extractTextFromContent(self: *AnthropicClient, json_text: []const u8) !?[]const u8 {
+    fn parseCompletionResponse(self: *GitHubCopilotClient, json_text: []const u8) !?[]const u8 {
         const parsed = std.json.parseFromSlice(
-            AnthropicResponse,
+            CopilotResponse,
             self.allocator,
             json_text,
             .{},
         ) catch |err| {
-            std.debug.print("[AnthropicClient] JSON parse error: {s}\n", .{@errorName(err)});
+            std.debug.print("[GitHubCopilotClient] JSON parse error: {s}\n", .{@errorName(err)});
             return null;
         };
         defer parsed.deinit();
 
-        if (parsed.value.content.len == 0) return null;
+        if (parsed.value.choices.len == 0) return null;
 
-        // Find first text content block
-        for (parsed.value.content) |content_block| {
-            if (std.mem.eql(u8, content_block.type, "text")) {
-                return try self.allocator.dupe(u8, content_block.text);
-            }
-        }
-
-        return null;
+        // Return first choice
+        return try self.allocator.dupe(u8, parsed.value.choices[0].text);
     }
 
-    /// Complete a prompt using Anthropic Claude with streaming
-    pub fn completeStreaming(self: *AnthropicClient, request: types.StreamingCompletionRequest) !types.StreamingCompletionResponse {
+    /// Complete with streaming (GitHub Copilot supports SSE)
+    pub fn completeStreaming(self: *GitHubCopilotClient, request: types.StreamingCompletionRequest) !types.StreamingCompletionResponse {
         const start_time = std.time.milliTimestamp();
 
-        const system_prompt = request.system_prompt orelse "You are a helpful coding assistant.";
-
-        // Build request body with stream: true
+        // Request body with stream: true
         const request_body = try std.fmt.allocPrint(
             self.allocator,
-            \\{{"model":"{s}","max_tokens":{},"system":"{s}","messages":[{{"role":"user","content":"{s}"}}],"stream":true}}
+            \\{{"prompt":"{s}","suffix":"","max_tokens":{},"temperature":{},"language":"{s}","stream":true}}
         ,
             .{
-                self.model,
-                request.max_tokens orelse 1024,
-                system_prompt,
                 request.prompt,
+                request.max_tokens orelse 100,
+                request.temperature orelse 0.2,
+                request.language orelse "plaintext",
             },
         );
         defer self.allocator.free(request_body);
 
-        // Build HTTP POST request
         var http_request = zhttp.Request.init(self.allocator, .POST, self.endpoint);
         defer http_request.deinit();
         http_request.setBody(zhttp.Body.fromString(request_body));
 
         try http_request.addHeader("Content-Type", "application/json");
-        try http_request.addHeader("x-api-key", self.api_key);
-        try http_request.addHeader("anthropic-version", "2023-06-01");
+        try http_request.addHeader("Authorization", try std.fmt.allocPrint(
+            self.allocator,
+            "Bearer {s}",
+            .{self.api_token},
+        ));
 
-        // Make HTTP POST request
         var response = self.client.send(http_request) catch |err| {
             const latency = @as(u32, @intCast(std.time.milliTimestamp() - start_time));
             return types.StreamingCompletionResponse{
-                .provider = .anthropic,
+                .provider = .github_copilot,
                 .total_tokens = 0,
                 .latency_ms = latency,
                 .success = false,
                 .error_message = try std.fmt.allocPrint(
                     self.allocator,
-                    "Anthropic HTTP error: {s}",
+                    "GitHub Copilot HTTP error: {s}",
                     .{@errorName(err)},
                 ),
             };
         };
         defer response.deinit();
 
-        // Read Server-Sent Events (SSE) stream
+        // Read SSE stream
         var total_tokens: u32 = 0;
         var buffer: [8192]u8 = undefined;
 
@@ -253,7 +263,7 @@ pub const AnthropicClient = struct {
                 if (err == error.EndOfStream) break;
                 const latency = @as(u32, @intCast(std.time.milliTimestamp() - start_time));
                 return types.StreamingCompletionResponse{
-                    .provider = .anthropic,
+                    .provider = .github_copilot,
                     .total_tokens = total_tokens,
                     .latency_ms = latency,
                     .success = false,
@@ -267,17 +277,11 @@ pub const AnthropicClient = struct {
 
             if (line.len == 0 or !std.mem.startsWith(u8, line, "data: ")) continue;
 
-            // Extract JSON from "data: {...}"
-            const json_start = "data: ".len;
-            if (line.len <= json_start) continue;
-
-            const json_data = line[json_start..];
-
-            // Check for stream end marker
+            const json_data = line["data: ".len..];
             if (std.mem.eql(u8, json_data, "[DONE]")) break;
 
-            // Parse streaming event
-            const text = try self.parseStreamingEvent(json_data);
+            // Parse chunk and call callback
+            const text = try self.parseStreamingChunk(json_data);
             defer if (text) |t| self.allocator.free(t);
 
             if (text) |t| {
@@ -289,7 +293,7 @@ pub const AnthropicClient = struct {
         const latency = @as(u32, @intCast(std.time.milliTimestamp() - start_time));
 
         return types.StreamingCompletionResponse{
-            .provider = .anthropic,
+            .provider = .github_copilot,
             .total_tokens = total_tokens,
             .latency_ms = latency,
             .success = true,
@@ -297,36 +301,16 @@ pub const AnthropicClient = struct {
         };
     }
 
-    const StreamingEvent = struct {
-        type: []const u8,
-        delta: ?struct {
-            type: ?[]const u8 = null,
-            text: ?[]const u8 = null,
-        } = null,
-    };
-
-    fn parseStreamingEvent(self: *AnthropicClient, json_text: []const u8) !?[]const u8 {
+    fn parseStreamingChunk(self: *GitHubCopilotClient, json_text: []const u8) !?[]const u8 {
         const parsed = std.json.parseFromSlice(
-            StreamingEvent,
+            CopilotResponse,
             self.allocator,
             json_text,
             .{},
-        ) catch |err| {
-            std.debug.print("[AnthropicClient] Streaming event parse error: {s}\n", .{@errorName(err)});
-            return null;
-        };
+        ) catch return null;
         defer parsed.deinit();
 
-        // Anthropic streaming events:
-        // {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hello"}}
-        if (std.mem.eql(u8, parsed.value.type, "content_block_delta")) {
-            if (parsed.value.delta) |delta| {
-                if (delta.text) |text| {
-                    return try self.allocator.dupe(u8, text);
-                }
-            }
-        }
-
-        return null;
+        if (parsed.value.choices.len == 0) return null;
+        return try self.allocator.dupe(u8, parsed.value.choices[0].text);
     }
 };

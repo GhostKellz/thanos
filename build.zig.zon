@@ -34,7 +34,7 @@
     .dependencies = .{
         .zontom = .{
             .url = "https://github.com/ghostkellz/zontom/archive/refs/heads/main.tar.gz",
-            .hash = "zontom-0.0.0-2iAquAddAgDlnkEBoJKiOF01hmgQy998kE_hKxmwpHzV",
+            .hash = "zontom-0.1.0-2iAquEzXAgC_dWnqpcwWcWG1afHMzTJRAKYP8c8LA0na",
         },
         .zsync = .{
             .url = "https://github.com/ghostkellz/zsync/archive/refs/heads/main.tar.gz",

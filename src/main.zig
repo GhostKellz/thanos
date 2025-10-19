@@ -26,6 +26,10 @@ pub fn main() !void {
         try completeCommand(allocator, args[2]);
     } else if (std.mem.eql(u8, command, "stats")) {
         try statsCommand(allocator);
+    } else if (std.mem.eql(u8, command, "health")) {
+        try healthCommand(allocator);
+    } else if (std.mem.eql(u8, command, "cost")) {
+        try costCommand(allocator);
     } else if (std.mem.eql(u8, command, "version")) {
         std.debug.print("Thanos v0.1.0 - Unified AI Infrastructure Gateway\n", .{});
     } else {
@@ -47,12 +51,16 @@ fn printUsage() !void {
         \\  discover    Discover available AI providers
         \\  complete    Complete a prompt using auto-routing
         \\  stats       Show Thanos statistics
+        \\  health      Show provider health status
+        \\  cost        Show cost tracking and budget status
         \\  version     Show version information
         \\
         \\Examples:
         \\  thanos --config ~/.config/thanos/thanos.toml discover
         \\  thanos complete "fn main() "
         \\  thanos stats
+        \\  thanos health
+        \\  thanos cost
         \\
     , .{});
 }
@@ -135,4 +143,38 @@ fn statsCommand(allocator: std.mem.Allocator) !void {
     std.debug.print("Providers Available: {}\n", .{stats.providers_available});
     std.debug.print("Total Requests: {}\n", .{stats.total_requests});
     std.debug.print("Avg Latency: {}ms\n", .{stats.avg_latency_ms});
+}
+
+fn healthCommand(allocator: std.mem.Allocator) !void {
+    std.debug.print("🏥 Provider Health Status\n\n", .{});
+
+    const config = try loadConfigWithFallback(allocator);
+
+    var thanos = try thanos_lib.Thanos.init(allocator, config);
+    defer thanos.deinit();
+
+    const health_report = try thanos.getHealthReport();
+    defer allocator.free(health_report);
+
+    std.debug.print("{s}\n", .{health_report});
+}
+
+fn costCommand(allocator: std.mem.Allocator) !void {
+    std.debug.print("💰 Cost Tracking & Budget Status\n\n", .{});
+
+    const config = try loadConfigWithFallback(allocator);
+
+    var thanos = try thanos_lib.Thanos.init(allocator, config);
+    defer thanos.deinit();
+
+    const cost_report = try thanos.getCostReport();
+    defer allocator.free(cost_report);
+
+    std.debug.print("{s}\n", .{cost_report});
+
+    // Show budget usage
+    const budget_usage = thanos.getBudgetUsage();
+    std.debug.print("\n📊 Budget Usage:\n", .{});
+    std.debug.print("  Daily: {d:.1}%\n", .{budget_usage.daily});
+    std.debug.print("  Monthly: {d:.1}%\n", .{budget_usage.monthly});
 }
