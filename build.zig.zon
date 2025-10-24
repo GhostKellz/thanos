@@ -46,7 +46,7 @@
         },
         .zrpc = .{
             .url = "https://github.com/ghostkellz/zrpc/archive/refs/heads/main.tar.gz",
-            .hash = "zrpc-0.1.0-b2Xib6X1BwCltazUe_BVVmRTkid4nqVfeknx8RMumZn3",
+            .hash = "zrpc-0.1.0-b2XibxcnCABT6GCuPe6brXrWWCFo0SYw3xFOET6d6VBd",
         },
         .rune = .{
             .url = "https://github.com/ghostkellz/rune/archive/refs/heads/main.tar.gz",
