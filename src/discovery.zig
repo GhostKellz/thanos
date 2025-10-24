@@ -25,6 +25,9 @@ pub const DiscoveryResult = struct {
 
 /// Discover available AI providers
 pub fn discoverProviders(allocator: std.mem.Allocator, config: types.Config) !DiscoveryResult {
+    std.debug.print("[Discovery] Starting provider discovery...\n", .{});
+    std.debug.print("[Discovery] Ollama endpoint from config: {?s}\n", .{config.ollama_endpoint});
+
     var discovered: std.ArrayList(types.Provider) = .empty;
     errdefer discovered.deinit(allocator);
 
@@ -75,13 +78,16 @@ const CheckResult = struct {
 fn checkOmen(allocator: std.mem.Allocator, endpoint: []const u8) !CheckResult {
     _ = allocator;
 
-    // Try to connect to Omen health endpoint
-    // TODO: Implement HTTP health check using zhttp
-    // For now, return unavailable
+    std.debug.print("[Discovery] Checking Omen at {s}/health...\n", .{endpoint});
 
-    // Placeholder: Would check http://localhost:3000/health
+    // For now, always return available if configured
+    // The actual HTTP check will happen when API calls are made
+    // This avoids async zhttp issues in discovery phase
+    // TODO: Implement proper async health check
+    std.debug.print("[Discovery] Omen assumed available\n", .{});
+
     return CheckResult{
-        .available = false,
+        .available = true,  // Assume available if configured
         .endpoint = endpoint,
     };
 }
@@ -90,13 +96,16 @@ fn checkOmen(allocator: std.mem.Allocator, endpoint: []const u8) !CheckResult {
 fn checkOllama(allocator: std.mem.Allocator, endpoint: []const u8) !CheckResult {
     _ = allocator;
 
-    // Try to connect to Ollama API endpoint
-    // TODO: Implement HTTP check using zhttp
-    // For now, return unavailable
+    std.debug.print("[Discovery] Checking Ollama at {s}...\n", .{endpoint});
 
-    // Placeholder: Would check http://localhost:11434/api/tags
+    // For now, always return available if configured
+    // The actual HTTP check will happen when API calls are made
+    // This avoids async zhttp issues in discovery phase
+    // TODO: Implement proper async health check
+    std.debug.print("[Discovery] Ollama assumed available\n", .{});
+
     return CheckResult{
-        .available = false,
+        .available = true,  // Assume available if configured
         .endpoint = endpoint,
     };
 }

@@ -45,6 +45,7 @@ pub const Thanos = struct {
             std.debug.print("[Thanos] 🌌 Initializing Thanos AI Infrastructure Gateway\n", .{});
         }
 
+        std.debug.print("[Thanos.init] Creating Thanos instance...\n", .{});
         var self = Thanos{
             .allocator = allocator,
             .config = config,
@@ -61,9 +62,11 @@ pub const Thanos = struct {
             .stream_manager = streaming.StreamManager.init(allocator, 10), // max 10 concurrent streams
         };
 
+        std.debug.print("[Thanos.init] About to run provider discovery...\n", .{});
         // Run provider discovery
         try self.discoverProviders();
 
+        std.debug.print("[Thanos.init] About to initialize clients...\n", .{});
         // Initialize clients for discovered providers
         try self.initializeClients();
 
@@ -119,7 +122,12 @@ pub const Thanos = struct {
             std.debug.print("[Thanos] 🔍 Discovering providers...\n", .{});
         }
 
-        self.discovery_result = try discovery.discoverProviders(self.allocator, self.config);
+        std.debug.print("[Thanos.discoverProviders] About to call discovery.discoverProviders...\n", .{});
+        self.discovery_result = discovery.discoverProviders(self.allocator, self.config) catch |err| {
+            std.debug.print("[Thanos.discoverProviders] ERROR: {s}\n", .{@errorName(err)});
+            return err;
+        };
+        std.debug.print("[Thanos.discoverProviders] Discovery complete!\n", .{});
     }
 
     /// Initialize clients for discovered providers
