@@ -8,7 +8,6 @@ pub const Provider = enum {
     anthropic, // Direct Anthropic API (Claude)
     openai, // Direct OpenAI API (GPT)
     xai, // xAI Grok
-    github_copilot, // GitHub Copilot
     google, // Google Gemini
 
     pub fn toString(self: Provider) []const u8 {
@@ -18,7 +17,6 @@ pub const Provider = enum {
             .anthropic => "anthropic",
             .openai => "openai",
             .xai => "xai",
-            .github_copilot => "github_copilot",
             .google => "google",
         };
     }
@@ -29,7 +27,6 @@ pub const Provider = enum {
         if (std.mem.eql(u8, str, "anthropic")) return .anthropic;
         if (std.mem.eql(u8, str, "openai")) return .openai;
         if (std.mem.eql(u8, str, "xai")) return .xai;
-        if (std.mem.eql(u8, str, "github_copilot")) return .github_copilot;
         if (std.mem.eql(u8, str, "google")) return .google;
         return null;
     }
@@ -236,7 +233,6 @@ pub const Config = struct {
     anthropic: ProviderConfig = .{},
     openai: ProviderConfig = .{},
     xai: ProviderConfig = .{},
-    github_copilot: ProviderConfig = .{},
     google: ProviderConfig = .{},
     ollama_config: ProviderConfig = .{ .model = "codellama:latest" },
 
@@ -268,16 +264,16 @@ pub const Config = struct {
                 try self.task_routing.put(.semantic_search, .{ .primary = .ollama });
             },
             .api_heavy => {
-                try self.task_routing.put(.completion, .{ .primary = .github_copilot, .fallback = .anthropic });
+                try self.task_routing.put(.completion, .{ .primary = .anthropic });
                 try self.task_routing.put(.chat, .{ .primary = .anthropic });
                 try self.task_routing.put(.review, .{ .primary = .anthropic, .fallback = .openai });
                 try self.task_routing.put(.explain, .{ .primary = .anthropic });
                 try self.task_routing.put(.refactor, .{ .primary = .anthropic });
-                try self.task_routing.put(.commit_msg, .{ .primary = .github_copilot, .fallback = .anthropic });
+                try self.task_routing.put(.commit_msg, .{ .primary = .anthropic });
                 try self.task_routing.put(.semantic_search, .{ .primary = .anthropic });
             },
             .hybrid => {
-                try self.task_routing.put(.completion, .{ .primary = .ollama, .fallback = .github_copilot });
+                try self.task_routing.put(.completion, .{ .primary = .ollama, .fallback = .anthropic });
                 try self.task_routing.put(.chat, .{ .primary = .ollama, .fallback = .anthropic });
                 try self.task_routing.put(.review, .{ .primary = .ollama, .fallback = .anthropic });
                 try self.task_routing.put(.explain, .{ .primary = .ollama });
@@ -297,7 +293,7 @@ pub const Config = struct {
         if (self.config_file) |path| allocator.free(path);
 
         // Free provider configs
-        inline for (.{ "anthropic", "openai", "xai", "github_copilot", "google", "ollama_config" }) |field_name| {
+        inline for (.{ "anthropic", "openai", "xai", "google", "ollama_config" }) |field_name| {
             const provider_config = @field(self, field_name);
             if (provider_config.api_key) |key| allocator.free(key);
             if (provider_config.model) |model| allocator.free(model);

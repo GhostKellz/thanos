@@ -53,7 +53,6 @@ fn getDefaultPricing(provider: types.Provider) ProviderPricing {
         .ollama => .{ .provider = .ollama, .model = .free },
         .anthropic => .{ .provider = .anthropic, .model = .token, .input_cost_per_1m = 3.00, .output_cost_per_1m = 15.00 },
         .openai => .{ .provider = .openai, .model = .token, .input_cost_per_1m = 10.00, .output_cost_per_1m = 30.00 },
-        .github_copilot => .{ .provider = .github_copilot, .model = .subscription, .monthly_cost = 10.00 },
         .xai => .{ .provider = .xai, .model = .token, .input_cost_per_1m = 5.00, .output_cost_per_1m = 15.00 },
         .google => .{ .provider = .google, .model = .token, .input_cost_per_1m = 2.50, .output_cost_per_1m = 10.00 },
         else => .{ .provider = provider, .model = .free },
@@ -124,7 +123,6 @@ pub const CostTracker = struct {
             .anthropic,
             .openai,
             .xai,
-            .github_copilot,
             .google,
         };
 

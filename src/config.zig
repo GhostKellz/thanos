@@ -78,11 +78,6 @@ pub fn loadConfig(allocator: std.mem.Allocator, path: []const u8) !types.Config 
             config.ollama_config = try parseProviderConfig(allocator, ollama);
         }
 
-        // GitHub Copilot
-        if (zontom.getTable(providers, "github_copilot")) |copilot| {
-            config.github_copilot = try parseProviderConfig(allocator, copilot);
-        }
-
         // Google
         if (zontom.getTable(providers, "google")) |google| {
             config.google = try parseProviderConfig(allocator, google);

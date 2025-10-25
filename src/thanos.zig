@@ -17,7 +17,6 @@ const BoltGrpcClient = @import("clients/bolt_grpc_client.zig").BoltGrpcClient;
 const AnthropicClient = @import("clients/anthropic_client.zig").AnthropicClient;
 const OpenAIClient = @import("clients/openai_client.zig").OpenAIClient;
 const XAIClient = @import("clients/xai_client.zig").XAIClient;
-const GitHubCopilotClient = @import("clients/github_copilot_client.zig").GitHubCopilotClient;
 
 pub const Thanos = struct {
     allocator: std.mem.Allocator,
@@ -30,7 +29,6 @@ pub const Thanos = struct {
     anthropic_client: ?AnthropicClient,
     openai_client: ?OpenAIClient,
     xai_client: ?XAIClient,
-    github_copilot_client: ?GitHubCopilotClient,
 
     // Discovery results
     discovery_result: ?discovery.DiscoveryResult,
@@ -55,7 +53,6 @@ pub const Thanos = struct {
             .anthropic_client = null,
             .openai_client = null,
             .xai_client = null,
-            .github_copilot_client = null,
             .discovery_result = null,
             .health_monitor = try health.HealthMonitor.init(allocator, .{}),
             .cost_tracker = try cost.CostTracker.init(allocator, .{}),
@@ -102,9 +99,6 @@ pub const Thanos = struct {
             client.deinit();
         }
 
-        if (self.github_copilot_client) |*client| {
-            client.deinit();
-        }
 
         if (self.discovery_result) |*result| {
             result.deinit();
@@ -174,13 +168,6 @@ pub const Thanos = struct {
             );
         }
 
-        if (self.config.github_copilot.enabled) {
-            self.github_copilot_client = try GitHubCopilotClient.init(
-                self.allocator,
-                self.config.github_copilot.api_key,
-                self.config.github_copilot.endpoint,
-            );
-        }
 
         // Always initialize Bolt gRPC client for MCP tools
         self.bolt_grpc_client = try BoltGrpcClient.init(self.allocator, self.config.bolt_grpc_endpoint);
@@ -318,19 +305,6 @@ pub const Thanos = struct {
                 var mut_client = client;
                 break :blk try mut_client.completeStreaming(request);
             },
-            .github_copilot => blk: {
-                const client = self.github_copilot_client orelse {
-                    break :blk types.StreamingCompletionResponse{
-                        .provider = .github_copilot,
-                        .total_tokens = 0,
-                        .latency_ms = 0,
-                        .success = false,
-                        .error_message = try self.allocator.dupe(u8, "GitHub Copilot not available"),
-                    };
-                };
-                var mut_client = client;
-                break :blk try mut_client.completeStreaming(request);
-            },
             else => types.StreamingCompletionResponse{
                 .provider = provider,
                 .total_tokens = 0,
@@ -418,20 +392,6 @@ pub const Thanos = struct {
                 var mut_client = client;
                 break :blk try mut_client.complete(request);
             },
-            .github_copilot => blk: {
-                const client = self.github_copilot_client orelse {
-                    break :blk types.CompletionResponse{
-                        .text = try self.allocator.dupe(u8, ""),
-                        .provider = .github_copilot,
-                        .confidence = 0.0,
-                        .latency_ms = 0,
-                        .success = false,
-                        .error_message = try self.allocator.dupe(u8, "GitHub Copilot not configured"),
-                    };
-                };
-                var mut_client = client;
-                break :blk try mut_client.complete(request);
-            },
             else => types.CompletionResponse{
                 .text = try self.allocator.dupe(u8, ""),
                 .provider = provider,
@@ -485,7 +445,6 @@ pub const Thanos = struct {
         if (self.anthropic_client != null) stats.providers_available += 1;
         if (self.openai_client != null) stats.providers_available += 1;
         if (self.xai_client != null) stats.providers_available += 1;
-        if (self.github_copilot_client != null) stats.providers_available += 1;
 
         return stats;
     }
