@@ -8,7 +8,7 @@
 *Talk to any AI provider like you're talking to Claude*
 
 ![Built with Zig](https://img.shields.io/badge/Built%20with-Zig%200.16-yellow?logo=zig&style=for-the-badge)
-![Multi-Provider](https://img.shields.io/badge/Providers-7+-purple?style=for-the-badge)
+![Multi-Provider](https://img.shields.io/badge/Providers-6+-purple?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 
 [![GitHub Stars](https://img.shields.io/github/stars/ghostkellz/thanos?style=social)](https://github.com/ghostkellz/thanos)
@@ -24,7 +24,7 @@
 
 **Thanos** is a universal AI gateway written in pure Zig that lets you:
 
-- 🤖 **Use ANY AI provider** - Claude, GPT-4, Grok, Ollama, GitHub Copilot, and more
+- 🤖 **Use ANY AI provider** - Claude, GPT-5, Grok, Ollama, Gemini, and more
 - 💰 **Save money** - Built-in caching, intelligent routing, local-first options
 - 🚀 **Go fast** - Native Zig performance, zero overhead
 - 🔒 **Stay private** - Local-first with Ollama, cloud when you need it
@@ -33,7 +33,7 @@
 ### The Problem Thanos Solves
 
 **Before Thanos:**
-- Lock-in to one AI provider (Copilot, Claude Code, etc.)
+- Lock-in to one AI provider (Claude Code, etc.)
 - Expensive API costs
 - No fallback when provider is down
 - Different SDKs for each provider
@@ -52,7 +52,7 @@
 
 ### Core Capabilities
 
-- ✅ **Multi-Provider Support** - 7+ AI providers out of the box
+- ✅ **Multi-Provider Support** - 6+ AI providers out of the box
 - ✅ **Intelligent Routing** - Auto-select best provider via Omen
 - ✅ **Cost Optimization** - LRU cache with TTL saves API calls
 - ✅ **Retry Logic** - Exponential backoff with circuit breaker
@@ -67,9 +67,8 @@
 |----------|--------|----------|------|
 | 🦙 **Ollama** | ✅ | Local, private, free | Free |
 | 🧠 **Anthropic Claude** | ✅ | Complex code, reasoning | $$$ |
-| 🤖 **OpenAI GPT-4** | ✅ | General purpose | $$$ |
+| 🤖 **OpenAI GPT-5** | ✅ | General purpose | $$$ |
 | 🚀 **xAI Grok** | ✅ | Conversational, fast | $$ |
-| 🐙 **GitHub Copilot** | ✅ | Code completion | $$ |
 | 🌐 **Google Gemini** | ✅ | Multimodal | $$ |
 | 🔀 **Omen Gateway** | ✅ | Smart routing | Variable |
 
@@ -237,7 +236,7 @@ See [full configuration guide](docs/configuration.md) for all options.
 │ (Router) │    │ (Local)  │  │ (Claude) │  │  (GPT)   │
 └────┬─────┘    └──────────┘  └──────────┘  └──────────┘
      │
-     └─→ Routes to: Claude, GPT-4, Grok, Gemini, Copilot...
+     └─→ Routes to: Claude, GPT-5, Grok, Gemini...
 ```
 
 ### How It Works

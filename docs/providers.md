@@ -4,13 +4,12 @@ This guide covers setting up each AI provider with Thanos.
 
 ## Overview
 
-Thanos supports 7+ AI providers out of the box:
+Thanos supports 6+ AI providers out of the box:
 
 - **Ollama** - Free, local, private
 - **Anthropic Claude** - Best for complex code
-- **OpenAI GPT-4** - General purpose
+- **OpenAI GPT-5** - General purpose
 - **xAI Grok** - Fast, conversational
-- **GitHub Copilot** - Code completion
 - **Google Gemini** - Multimodal
 - **Omen** - Intelligent routing gateway
 
@@ -91,7 +90,7 @@ thanos complete --provider anthropic "Explain this error message in detail"
 
 ---
 
-## OpenAI GPT-4
+## OpenAI GPT-5
 
 **Best for**: General purpose AI, widely compatible
 
@@ -119,8 +118,8 @@ temperature = 0.7
 
 | Model | Best For | Cost (per 1M tokens) |
 |-------|----------|---------------------|
-| `gpt-4-turbo-preview` | Latest features | $10.00 input / $30.00 output |
-| `gpt-4` | Stable, reliable | $30.00 input / $60.00 output |
+| `gpt-5-preview` | Latest features | $10.00 input / $30.00 output |
+| `gpt-4-turbo-preview` | Stable, reliable | $10.00 input / $30.00 output |
 | `gpt-3.5-turbo` | Fast, cheap | $0.50 input / $1.50 output |
 
 ---
@@ -149,37 +148,6 @@ temperature = 0.7
 - Real-time information (up to current date)
 - Conversational style
 - Faster responses than GPT-4
-
----
-
-## GitHub Copilot
-
-**Best for**: Code completion (if you already subscribe)
-
-### Setup
-
-1. **Prerequisites**: Active GitHub Copilot subscription
-
-2. **Authenticate via GitHub CLI**:
-```bash
-gh auth login
-```
-
-3. **Configure Thanos**:
-```toml
-[providers.github_copilot]
-enabled = true
-model = "gpt-4"
-temperature = 0.3  # Lower for more focused completions
-```
-
-### Usage
-
-Thanos uses your existing GitHub Copilot authentication. No additional API key needed!
-
-```bash
-thanos complete --provider github_copilot "complete this function"
-```
 
 ---
 
@@ -308,7 +276,7 @@ routing_strategy = "cost-optimized"
 | Claude Haiku | $0.003 | $0.02 | $0.10 |
 | GPT-3.5 | $0.002 | $0.015 | $0.08 |
 | Claude Sonnet | $0.03 | $0.15 | $0.75 |
-| GPT-4 | $0.04 | $0.20 | $1.00 |
+| GPT-5 | $0.04 | $0.20 | $1.00 |
 
 **Recommendation**: Use Ollama for 80% of tasks, cloud for the 20% that need it.
 
@@ -326,7 +294,7 @@ routing_strategy = "cost-optimized"
 - Best for refactoring and explaining code
 - Use Haiku for speed, Sonnet for quality
 
-### OpenAI GPT-4
+### OpenAI GPT-5
 - Most widely compatible
 - Good all-around performance
 - Use `gpt-3.5-turbo` for simple tasks to save money
