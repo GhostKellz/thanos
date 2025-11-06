@@ -1,0 +1,63 @@
+[Unit]
+Description=Thanos AI Gateway
+Documentation=https://github.com/yourusername/thanos
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=thanos
+Group=thanos
+
+# Binary
+ExecStart=/usr/bin/thanos
+
+# Configuration
+Environment="THANOS_CONFIG=/etc/thanos/config.toml"
+EnvironmentFile=-/etc/thanos/thanos.env
+
+# Restart policy
+Restart=on-failure
+RestartSec=5s
+StartLimitInterval=60s
+StartLimitBurst=3
+
+# Security Hardening
+# Filesystem
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/thanos /var/run/thanos
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# Capabilities
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# System calls
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+SystemCallArchitectures=native
+
+# Network
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+# Misc
+LockPersonality=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RemoveIPC=true
+ProtectHostname=true
+ProtectClock=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=thanos
+
+[Install]
+WantedBy=multi-user.target

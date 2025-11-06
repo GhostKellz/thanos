@@ -1,0 +1,89 @@
+# Maintainer: Your Name <your.email@example.com>
+pkgname=thanos-gateway
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="Universal AI Gateway - Multi-provider LLM gateway with OAuth support"
+arch=('x86_64' 'aarch64')
+url="https://github.com/yourusername/thanos"
+license=('MIT')
+depends=('gcc-libs' 'openssl')
+makedepends=('rust' 'cargo' 'protobuf')
+optdepends=(
+    'ollama: Local AI models'
+    'systemd: Service management'
+)
+provides=('thanos')
+conflicts=('thanos')
+backup=('etc/thanos/config.toml')
+source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/v${pkgver}.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "${srcdir}/thanos-${pkgver}"
+
+    cargo build --release --locked
+}
+
+check() {
+    cd "${srcdir}/thanos-${pkgver}"
+
+    cargo test --release --locked
+}
+
+package() {
+    cd "${srcdir}/thanos-${pkgver}"
+
+    # Install binary
+    install -Dm755 "target/release/thanos" "${pkgdir}/usr/bin/thanos"
+
+    # Install config
+    install -Dm644 "config.example.toml" "${pkgdir}/etc/thanos/config.toml"
+
+    # Install systemd service (shared across all distros)
+    install -Dm644 "release/linux/thanos.service" "${pkgdir}/usr/lib/systemd/system/thanos.service"
+
+    # Install environment template
+    install -Dm644 "release/linux/thanos.env.example" "${pkgdir}/etc/thanos/thanos.env"
+
+    # Create directories
+    install -dm755 "${pkgdir}/var/lib/thanos"
+    install -dm755 "${pkgdir}/var/run/thanos"
+
+    # Install documentation
+    install -Dm644 "README.md" "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+    install -Dm644 "PROTOCOLS.md" "${pkgdir}/usr/share/doc/${pkgname}/PROTOCOLS.md"
+    install -Dm644 "LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}
+
+post_install() {
+    echo "==> Creating thanos user and group..."
+    if ! getent group thanos >/dev/null; then
+        groupadd -r thanos
+    fi
+    if ! getent passwd thanos >/dev/null; then
+        useradd -r -g thanos -d /var/lib/thanos -s /bin/false thanos
+    fi
+
+    echo "==> Setting permissions..."
+    chown -R thanos:thanos /var/lib/thanos /var/run/thanos
+    chmod 750 /var/lib/thanos /var/run/thanos
+    chmod 640 /etc/thanos/config.toml
+    chown root:thanos /etc/thanos/config.toml
+
+    echo ""
+    echo "==> Next steps:"
+    echo "  1. Edit /etc/thanos/config.toml and add your API keys"
+    echo "  2. For OAuth: thanos auth claude / thanos auth github"
+    echo "  3. Start service: sudo systemctl start thanos"
+    echo "  4. Enable on boot: sudo systemctl enable thanos"
+    echo ""
+}
+
+post_upgrade() {
+    post_install
+}
+
+pre_remove() {
+    systemctl stop thanos.service 2>/dev/null || true
+    systemctl disable thanos.service 2>/dev/null || true
+}

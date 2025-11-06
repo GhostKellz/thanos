@@ -1,0 +1,211 @@
+# Thanos Configuration
+# Universal AI Gateway
+
+# Server configuration
+[server]
+bind = "0.0.0.0:9000"       # HTTP API endpoint
+grpc = "0.0.0.0:50051"      # gRPC endpoint
+log_level = "info"          # trace, debug, info, warn, error
+
+# Unix Domain Socket (UDS) - Fastest for local clients (Zeke CLI, Zeke.nvim)
+uds_enabled = true          # Enable UDS socket
+uds_path = "/var/run/thanos/thanos.sock"  # Socket path (default)
+
+# Routing strategy
+[routing]
+# Strategy: "omen" (delegate to Omen), "preferred" (use preferred provider),
+# "round-robin" (cycle through providers), "fallback" (try chain in order)
+strategy = "omen"
+
+# Fallback chain if primary provider fails
+fallback_chain = ["anthropic", "openai", "ollama"]
+
+# Load balancing for round-robin
+load_balance = ["anthropic", "openai", "xai"]
+
+# ─────────────────────────────────────────────────────────────
+# Provider Configurations
+# ─────────────────────────────────────────────────────────────
+
+# Anthropic (API Key)
+# Supports: claude-opus-4-20250514, claude-sonnet-4-5-20250513, claude-haiku-4-5-20250513
+[providers.anthropic]
+enabled = true
+auth_method = "api_key"
+api_key = "${ANTHROPIC_API_KEY}"  # or hardcode (not recommended)
+base_url = "https://api.anthropic.com"
+model = "claude-sonnet-4-5-20250513"  # or opus-4, haiku-4-5
+max_tokens = 8192
+temperature = 0.7
+
+# Anthropic Claude Max (OAuth)
+# Use your $100/month Claude Max subscription instead of API billing
+[providers.anthropic_max]
+enabled = false
+auth_method = "oauth"
+# OAuth client ID (public, from Anthropic console)
+client_id = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+# Tokens will be stored in system keyring
+model = "claude-sonnet-4-5-20250513"  # or opus-4, haiku-4-5
+# Note: Run `thanos auth claude` to authenticate
+
+# OpenAI
+# Supports: gpt-5, gpt-4o, o3-mini, codex
+[providers.openai]
+enabled = true
+auth_method = "api_key"
+api_key = "${OPENAI_API_KEY}"
+base_url = "https://api.openai.com/v1"
+model = "gpt-5"  # or gpt-4o, o3-mini, codex
+max_tokens = 4096
+temperature = 0.7
+
+# xAI (Grok)
+[providers.xai]
+enabled = true
+auth_method = "api_key"
+api_key = "${XAI_API_KEY}"
+base_url = "https://api.x.ai/v1"
+model = "grok-2-latest"
+max_tokens = 4096
+temperature = 0.7
+
+# Google Gemini
+# Supports: gemini-2.0-flash-exp, gemini-2.5-pro, gemini-pro
+[providers.gemini]
+enabled = true
+auth_method = "api_key"
+api_key = "${GEMINI_API_KEY}"  # from https://aistudio.google.com/apikey
+base_url = "https://generativelanguage.googleapis.com"
+model = "gemini-2.5-pro"  # or gemini-2.0-flash-exp
+max_tokens = 8192
+temperature = 0.7
+
+# GitHub Copilot (OAuth Device Flow)
+[providers.github_copilot]
+enabled = false
+auth_method = "oauth"
+# VS Code's public client ID
+client_id = "Iv1.b507a08c87ecfe98"
+# Tokens stored in system keyring
+# Note: Run `thanos auth login github` to authenticate
+
+# Ollama (Local)
+[providers.ollama]
+enabled = false
+auth_method = "none"
+endpoint = "http://localhost:11434"
+# If running in Docker, use service name:
+# endpoint = "http://ollama:11434"
+model = "codellama:latest"
+
+# Omen (AI Routing Service)
+[providers.omen]
+enabled = false
+auth_method = "api_key"
+endpoint = "http://localhost:3000"
+api_key = "${OMEN_API_KEY}"  # optional, if Omen requires auth
+# Omen will select the best model based on:
+# - Cost optimization
+# - Latency requirements
+# - Model capabilities
+
+# ─────────────────────────────────────────────────────────────
+# models.dev Integration
+# ─────────────────────────────────────────────────────────────
+
+[models_dev]
+# Fetch provider/model metadata from https://models.dev
+enabled = true
+url = "https://models.dev/api.json"
+cache_ttl = 3600              # Cache for 1 hour (seconds)
+# This provides:
+# - Model pricing (input/output tokens)
+# - Context limits
+# - Capabilities (vision, function calling, etc.)
+# - Release dates
+
+# ─────────────────────────────────────────────────────────────
+# Advanced Settings
+# ─────────────────────────────────────────────────────────────
+
+[cache]
+enabled = true
+ttl = 300                     # Cache responses for 5 minutes
+max_size = 1000               # Max cached items
+
+[rate_limiting]
+enabled = true
+requests_per_minute = 60
+requests_per_hour = 1000
+
+[metrics]
+enabled = true
+prometheus_port = 9090
+# Metrics endpoint: http://localhost:9090/metrics
+
+[telemetry]
+enabled = false
+# Send anonymous usage stats (opt-in)
+
+# ─────────────────────────────────────────────────────────────
+# OAuth Settings (Advanced)
+# ─────────────────────────────────────────────────────────────
+
+[oauth]
+# Auto-refresh tokens before expiry
+auto_refresh = true
+# Warn when token expires in less than X hours
+refresh_warning_hours = 2
+# Keyring service name
+keyring_service = "thanos"
+
+# ─────────────────────────────────────────────────────────────
+# Examples of Usage
+# ─────────────────────────────────────────────────────────────
+
+# Example 1: API Key Only (Simple)
+# Set environment variables:
+#   export ANTHROPIC_API_KEY=sk-ant-...
+#   export OPENAI_API_KEY=sk-...
+# Enable only `anthropic` and `openai` providers above.
+
+# Example 2: Claude Max Subscription (OAuth)
+# 1. Set `providers.anthropic_max.enabled = true`
+# 2. Run: thanos auth login anthropic
+# 3. Browser opens → login → authorize
+# 4. Tokens stored in system keyring
+# 5. Use your $20/month subscription instead of API billing!
+
+# Example 3: GitHub Copilot (OAuth)
+# 1. Set `providers.github_copilot.enabled = true`
+# 2. Run: thanos auth login github
+# 3. Device flow: visit github.com/login/device
+# 4. Enter code shown in terminal
+# 5. Tokens stored in keyring
+
+# Example 4: Local Ollama Only
+# 1. Start Ollama: ollama serve
+# 2. Pull model: ollama pull codellama:latest
+# 3. Set `providers.ollama.enabled = true`
+# 4. Disable all cloud providers
+# 5. 100% local, no API keys needed!
+
+# Example 5: Omen Routing
+# 1. Run Omen service: omen serve
+# 2. Set `routing.strategy = "omen"`
+# 3. Omen will pick the best model for each request based on:
+#    - Task complexity
+#    - Cost constraints
+#    - Latency requirements
+
+# ─────────────────────────────────────────────────────────────
+# Environment Variable Substitution
+# ─────────────────────────────────────────────────────────────
+
+# Use ${VAR_NAME} syntax to reference environment variables.
+# Example:
+#   api_key = "${ANTHROPIC_API_KEY}"
+#
+# This will be replaced with the value of $ANTHROPIC_API_KEY at runtime.
+# If the variable is not set, Thanos will warn and disable that provider.

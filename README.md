@@ -7,14 +7,14 @@
 
 *Talk to any AI provider like you're talking to Claude*
 
-![Built with Zig](https://img.shields.io/badge/Built%20with-Zig%200.16-yellow?logo=zig&style=for-the-badge)
+![Built with Rust](https://img.shields.io/badge/Built%20with-Rust-orange?logo=rust&style=for-the-badge)
 ![Multi-Provider](https://img.shields.io/badge/Providers-6+-purple?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 
 [![GitHub Stars](https://img.shields.io/github/stars/ghostkellz/thanos?style=social)](https://github.com/ghostkellz/thanos)
 [![Issues](https://img.shields.io/github/issues/ghostkellz/thanos)](https://github.com/ghostkellz/thanos/issues)
 
-[Quick Start](#-quick-start) • [Features](#-features) • [Installation](#-installation) • [Documentation](docs/) • [Plugins](#-editor-plugins)
+[Quick Start](#-quick-start) • [Features](#-features) • [API](#-api) • [Architecture](#-architecture)
 
 </div>
 
@@ -22,29 +22,28 @@
 
 ## 🌟 What is Thanos?
 
-**Thanos** is a universal AI gateway written in pure Zig that lets you:
+**Thanos** is a universal AI gateway written in Rust that runs as a gRPC/HTTP service — the central model hub that all your tools plug into:
 
-- 🤖 **Use ANY AI provider** - Claude, GPT-5, Grok, Ollama, Gemini, and more
-- 💰 **Save money** - Built-in caching, intelligent routing, local-first options
-- 🚀 **Go fast** - Native Zig performance, zero overhead
-- 🔒 **Stay private** - Local-first with Ollama, cloud when you need it
-- 🛠️ **Never vendor lock** - Switch providers anytime, or use multiple simultaneously
+- 🤖 **One gateway, many providers** - Anthropic, OpenAI, xAI, Gemini, Ollama, Omen
+- 🔌 **One API surface** - gRPC + HTTP endpoints, same schema for all providers
+- 🎯 **Omen-aware routing** - Delegate model selection to Omen for cost/latency optimization
+- 🔁 **Streaming built-in** - Server-sent events for CLIs and editors
+- 🔄 **Fallback chains** - If model A fails, try B, then C
+- 🚀 **Container-friendly** - Run as a small service beside your editor/CLI tools
 
-### The Problem Thanos Solves
+### Why Thanos?
 
-**Before Thanos:**
-- Lock-in to one AI provider (Claude Code, etc.)
-- Expensive API costs
-- No fallback when provider is down
-- Different SDKs for each provider
-- Can't use local models
+You want to:
+- ✅ Add Ollama/local models but don't want to change client code
+- ✅ Use multiple providers without 5 different integrations
+- ✅ Have editor plugins (Neovim, VS Code) that stay dumb and fast
+- ✅ Let **Omen** pick the best model for you
+- ✅ Have **one stable API** your tools (zeke, zeke.nvim, Grim) can call
 
 **With Thanos:**
-- One API for all providers
-- Smart routing & caching saves money
-- Automatic fallbacks
-- Local-first with Ollama
-- Use the best provider for each task
+- 📡 **Clients** (zeke, nvim, CLI) stay simple, editor-focused
+- 🧠 **Omen** picks best/cheapest model based on task
+- 🔧 **Thanos** handles auth, streaming, provider adapters, fallbacks
 
 ---
 
@@ -52,14 +51,14 @@
 
 ### Core Capabilities
 
-- ✅ **Multi-Provider Support** - 6+ AI providers out of the box
-- ✅ **Intelligent Routing** - Auto-select best provider via Omen
-- ✅ **Cost Optimization** - LRU cache with TTL saves API calls
-- ✅ **Retry Logic** - Exponential backoff with circuit breaker
-- ✅ **Provider Discovery** - Auto-detect local services
-- ✅ **Graceful Fallbacks** - Automatic failover chain
-- ✅ **Zero Config** - Sensible defaults, works immediately
-- ✅ **Library + CLI** - Use as Zig library or command-line tool
+- ✅ **Normalized schema** - Same request/response for all providers
+- ✅ **Streaming support** - Server → client tokens for CLIs/editors
+- ✅ **Omen-aware routing** - Delegate model choice to Omen gateway
+- ✅ **Fallback chains** - If model A fails, try B, then C
+- ✅ **Provider adapters** - OpenAI, Anthropic, xAI, Gemini, Ollama
+- ✅ **gRPC + HTTP** - Dual interface for low-latency and web clients
+- ✅ **OAuth support** - GitHub auth (planned)
+- ✅ **Container-ready** - Small service, easy to deploy
 
 ### Supported Providers
 
@@ -70,270 +69,224 @@
 | 🤖 **OpenAI GPT-5** | ✅ | General purpose | $$$ |
 | 🚀 **xAI Grok** | ✅ | Conversational, fast | $$ |
 | 🌐 **Google Gemini** | ✅ | Multimodal | $$ |
-| 🔀 **Omen Gateway** | ✅ | Smart routing | Variable |
+| 🔀 **Omen Gateway** | ✅ | Smart routing, optimization | Variable |
 
 ---
 
 ## 🚀 Quick Start
 
-### Installation
+### 1. Install & Run
 
 ```bash
 # Clone the repository
 git clone https://github.com/ghostkellz/thanos
 cd thanos
 
-# Build (Zig 0.16+ required)
-zig build
+# Build and run (Rust required)
+cargo build --release
+./target/release/thanos
 
-# Install to system (optional)
-zig build install --prefix ~/.local
+# Or run in dev mode
+cargo run
 ```
 
-### CLI Usage
+### 2. Configure (TOML)
 
-```bash
-# Discover available providers
-thanos discover
-
-# Complete a code prompt (auto-routes to best provider)
-thanos complete "fn fibonacci(n: usize) usize {"
-
-# Ask a question
-thanos complete "How do I reverse a string in Zig?"
-
-# Show statistics
-thanos stats
-
-# Show version
-thanos version
-```
-
-### Library Usage
-
-Add to your `build.zig.zon`:
-
-```zig
-.dependencies = .{
-    .thanos = .{
-        .url = "https://github.com/ghostkellz/thanos/archive/main.tar.gz",
-        .hash = "1220...", // zig will tell you the hash
-    },
-},
-```
-
-Use in your code:
-
-```zig
-const std = @import("std");
-const thanos = @import("thanos");
-
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
-    // Initialize with defaults (auto-discovery)
-    const config = thanos.Config{ .debug = false };
-    var ai = try thanos.Thanos.init(allocator, config);
-    defer ai.deinit();
-
-    // Complete a prompt
-    const request = thanos.CompletionRequest{
-        .prompt = "Write a quicksort in Zig",
-        .max_tokens = 500,
-    };
-
-    const response = try ai.complete(request);
-    defer response.deinit(allocator);
-
-    if (response.success) {
-        std.debug.print("AI: {s}\n", .{response.text});
-        std.debug.print("Provider: {s}\n", .{response.provider.toString()});
-        std.debug.print("Latency: {}ms\n", .{response.latency_ms});
-    }
-}
-```
-
----
-
-## 📖 Documentation
-
-- **[Installation Guide](docs/installation.md)** - Detailed setup for all platforms
-- **[Configuration Reference](docs/configuration.md)** - TOML config options
-- **[Provider Setup](docs/providers.md)** - Per-provider API key setup
-- **[Architecture](docs/architecture.md)** - How Thanos works internally
-- **[API Reference](docs/api.md)** - Full library API documentation
-- **[CLI Reference](docs/cli.md)** - Command-line tool guide
-
----
-
-## ⚙️ Configuration
-
-Thanos works with zero configuration, but can be customized via `~/.config/thanos/config.toml` (or `./thanos.toml`):
+Create `~/.config/thanos/config.toml` or `./thanos.toml`:
 
 ```toml
-[general]
-debug = false
-preferred_provider = "anthropic"  # or "ollama" for local-first
+[server]
+bind = "0.0.0.0:8080"      # HTTP endpoint
+grpc = "0.0.0.0:50051"      # gRPC endpoint
 
 [providers.anthropic]
 enabled = true
-api_key = "${ANTHROPIC_API_KEY}"  # Or hardcode
-model = "claude-sonnet-4-20250514"
-max_tokens = 4096
-temperature = 0.7
+api_key = "${ANTHROPIC_API_KEY}"
+model = "claude-3-7-sonnet-20250219"
+
+[providers.openai]
+enabled = true
+api_key = "${OPENAI_API_KEY}"
+model = "gpt-4o"
 
 [providers.ollama]
 enabled = true
-model = "codellama:latest"
 endpoint = "http://localhost:11434"
+model = "codellama:latest"
 
 [providers.omen]
 enabled = true
-routing_strategy = "cost-optimized"  # or "latency-optimized"
+endpoint = "http://localhost:3000"
 
-# Automatic fallback chain
 [routing]
-fallback_chain = ["anthropic", "openai", "xai", "ollama"]
-
-# Cost limits (optional)
-[budget]
-enabled = false
-daily_limit_usd = 10.00
+# Delegate model selection to Omen, or specify preferred provider
+strategy = "omen"  # or "preferred", "round-robin", "fallback"
+fallback_chain = ["anthropic", "openai", "ollama"]
 ```
 
-See [full configuration guide](docs/configuration.md) for all options.
+### 3. Call It
+
+**HTTP Example:**
+
+```bash
+curl -X POST http://localhost:8080/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "anthropic/claude-3.7-sonnet",
+    "messages": [{"role": "user", "content": "Write a quicksort in Rust"}],
+    "stream": true
+  }'
+```
+
+**gRPC Example (from your editor):**
+
+```rust
+// In zeke, zeke.nvim, or any Rust client
+use thanos_client::ThanosClient;
+
+let mut client = ThanosClient::connect("http://localhost:50051").await?;
+let response = client.chat_completion(request).await?;
+```
+
+---
+
+## 📡 API
+
+### HTTP Endpoints
+
+```
+POST /v1/chat              # Chat completion (OpenAI-compatible)
+POST /v1/completions       # Text completion
+GET  /v1/models            # List available models
+GET  /health               # Health check
+GET  /metrics              # Prometheus metrics (planned)
+```
+
+### gRPC Service
+
+```protobuf
+service ThanosService {
+  rpc ChatCompletion(ChatRequest) returns (stream ChatResponse);
+  rpc ListModels(Empty) returns (ModelsResponse);
+  rpc Health(Empty) returns (HealthResponse);
+}
+```
+
+See [API docs](docs/api.md) for full reference.
 
 ---
 
 ## 🏗️ Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      Application Layer                       │
-│  (Your code, Grim editor, Neovim, CLI tools)                │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Thanos Gateway (Zig)                      │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │  Discovery   │  │   Routing    │  │    Cache     │      │
-│  │  (auto-find) │→ │ (smart pick) │→ │  (LRU+TTL)   │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-│                                                               │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │ Retry Logic  │  │    Errors    │  │   Stats      │      │
-│  │ (exp backoff)│  │ (structured) │  │ (telemetry)  │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-└────────────┬────────────────┬──────────────────┬────────────┘
-             │                │                  │
-      ┌──────┴────────┐       │           ┌──────┴──────┐
-      ▼               ▼       ▼           ▼             ▼
-┌──────────┐    ┌──────────┐  ┌──────────┐  ┌──────────┐
-│  Omen    │    │ Ollama   │  │ Anthropic│  │  OpenAI  │
-│ (Router) │    │ (Local)  │  │ (Claude) │  │  (GPT)   │
-└────┬─────┘    └──────────┘  └──────────┘  └──────────┘
-     │
-     └─→ Routes to: Claude, GPT-5, Grok, Gemini...
+       ┌──────────────────────────────────────┐
+       │       Client Layer                   │
+       │  zeke, zeke.nvim, Grim, curl         │
+       └──────────────┬───────────────────────┘
+                      │ gRPC / HTTP
+                      ▼
+       ┌──────────────────────────────────────┐
+       │      Thanos (Rust AI Gateway)        │
+       │                                      │
+       │  • auth / token validation           │
+       │  • model registry                    │
+       │  • provider adapters                 │
+       │  • streaming (SSE / gRPC streams)    │
+       │  • fallback chains                   │
+       └──────┬───────────────┬───────────────┘
+              │               │
+      ┌───────▼───────────────▼───────────┐
+      │     Providers / Backends          │
+      │  OpenAI │ Anthropic │ xAI │ ...   │
+      └───────────┬───────────────────────┘
+                  │
+                  ▼
+         ┌────────────────┐
+         │  Omen (Router) │ ← optional: picks best model
+         │  cost/latency  │
+         └────────────────┘
 ```
 
 ### How It Works
 
-1. **Discovery**: On startup, Thanos auto-detects available providers
-2. **Request**: Application sends prompt to Thanos
-3. **Routing**: Thanos picks best provider (user preference, Omen routing, or fallback)
-4. **Caching**: Checks cache for identical prompt
-5. **Execution**: Sends request to provider with retry logic
-6. **Response**: Returns unified response format
+**Your stable API** → Thanos handles all provider complexity
+**Omen** → picks best model / cheapest option (optional)
+**Clients** (zeke, nvim) → dumb, fast, editor-first
+
+1. **Client** sends chat request via gRPC or HTTP
+2. **Thanos** checks routing strategy:
+   - `"omen"` → delegate to Omen for model selection
+   - `"preferred"` → use configured provider
+   - `"fallback"` → try chain until success
+3. **Provider adapter** formats request, streams response
+4. **Streaming** → tokens flow back to client in real-time
 
 ---
 
 ## 🎯 Use Cases
 
-### For Developers
+### In Your Editor
 
-```zig
-// Generate code completions
-const code = try ai.complete(.{
-    .prompt = "impl Display for MyStruct {",
-    .language = "rust",
-});
+**Neovim** (`zeke.nvim`) → calls Thanos gRPC for:
+- Inline completion
+- Chat window
+- Code actions
 
-// Explain error messages
-const explanation = try ai.complete(.{
-    .prompt = "Explain this error: use of moved value",
-    .max_tokens = 200,
-});
+**VS Code / JetBrains** (planned) → calls HTTP endpoint
 
-// Generate tests
-const tests = try ai.complete(.{
-    .prompt = "Generate unit tests for: " ++ my_function,
-    .temperature = 0.3,  // Lower temp for more focused output
-});
-```
-
-### For CLI Power Users
+### In Your CLI
 
 ```bash
-# Git commit message generation
-git diff --staged | thanos complete "Generate a conventional commit message:"
+# zeke (Rust CLI) talks to Thanos
+zeke chat "Explain this error: borrow checker issue"
 
-# Documentation generation
-thanos complete "Document this function: $(cat my_func.zig)"
-
-# Code review
-thanos complete "Review this PR for potential issues: $(git diff main)"
+# Or direct HTTP
+curl http://localhost:8080/v1/chat -d '{"model": "auto", "messages": [...]}'
 ```
 
-### For Automation
+### From Your Code
 
-```bash
-# Cost-effective batch processing (uses cache + Ollama)
-for file in *.zig; do
-  thanos complete "Add doc comments to: $(cat $file)" > "${file}.documented"
-done
+```rust
+// Any Rust client can use the gRPC API
+use thanos_client::ThanosClient;
 
-# Multi-provider redundancy
-thanos complete "Critical task" --provider anthropic --fallback openai,ollama
+let mut client = ThanosClient::connect("http://localhost:50051").await?;
+let response = client.chat(request).await?;
 ```
 
 ---
 
 ## 🔌 Editor Plugins
 
-Thanos powers AI features in your favorite editors:
-
-### Grim Editor
-
-**[thanos.grim](https://github.com/ghostkellz/thanos.grim)** - Native Zig plugin
-
-```bash
-git clone https://github.com/ghostkellz/thanos.grim ~/.config/grim/plugins/thanos
-```
-
-Features: Inline completion, chat, code actions, multi-provider switching
+Thanos is a **service**, not a library. Your editor plugins talk to it over gRPC/HTTP:
 
 ### Neovim
 
-**[thanos.nvim](https://github.com/ghostkellz/thanos.nvim)** - Lua FFI plugin
+**[zeke.nvim](https://github.com/ghostkellz/zeke.nvim)** - Lua plugin
 
 ```lua
 -- lazy.nvim
 {
-  'ghostkellz/thanos.nvim',
+  'ghostkellz/zeke.nvim',
   config = function()
-    require('thanos').setup({ preferred_provider = 'ollama' })
+    require('zeke').setup({
+      thanos_endpoint = "http://localhost:50051"  -- gRPC
+    })
   end
 }
 ```
 
-Features: Chat window, Telescope integration, LSP actions
+Features: Streaming inline completion, chat, model switching
 
-### VSCode (Planned)
+### Grim Editor
 
-Language Server Protocol integration coming soon.
+**[thanos.grim](https://github.com/ghostkellz/thanos.grim)** - Native plugin
+
+Features: Code actions, inline AI, multi-provider aware
+
+### VS Code / JetBrains (Planned)
+
+HTTP endpoint integration coming soon.
 
 ---
 
@@ -342,91 +295,67 @@ Language Server Protocol integration coming soon.
 ### Building from Source
 
 ```bash
-# Clone with dependencies
+# Clone
 git clone https://github.com/ghostkellz/thanos
 cd thanos
 
-# Build library + CLI
-zig build
+# Build
+cargo build --release
 
 # Run tests
-zig build test
+cargo test
 
-# Install locally
-zig build install --prefix ~/.local
-```
-
-### Running Tests
-
-```bash
-# All tests
-zig build test
-
-# Specific test
-zig test src/cache.zig
+# Run dev server
+cargo run
 ```
 
 ### Project Structure
 
 ```
 thanos/
+├── Cargo.toml
 ├── src/
-│   ├── root.zig           # Public API exports
-│   ├── main.zig           # CLI tool
-│   ├── thanos.zig         # Core orchestration
-│   ├── types.zig          # Type definitions
-│   ├── config.zig         # TOML configuration
-│   ├── discovery.zig      # Provider auto-detection
-│   ├── errors.zig         # Error types & handling
-│   ├── cache.zig          # LRU cache with TTL
-│   ├── retry.zig          # Retry logic & circuit breaker
-│   └── clients/           # Provider-specific clients
-│       ├── anthropic_client.zig
-│       ├── openai_client.zig
-│       ├── xai_client.zig
-│       ├── ollama_client.zig
-│       ├── omen_client.zig
-│       └── bolt_grpc_client.zig
-├── docs/                  # Documentation
-├── examples/              # Example code
-├── build.zig
-├── build.zig.zon
-└── README.md
+│   ├── main.rs           # Service entry point
+│   ├── server.rs         # HTTP + gRPC servers
+│   ├── config.rs         # TOML configuration
+│   ├── routing.rs        # Omen-aware routing
+│   ├── providers/        # Provider adapters
+│   │   ├── openai.rs
+│   │   ├── anthropic.rs
+│   │   ├── xai.rs
+│   │   ├── ollama.rs
+│   │   └── omen.rs
+│   └── proto/
+│       └── thanos.proto  # gRPC service definition
+└── docs/
 ```
 
 ---
 
-## 📊 Performance
+## 🧠 Why Rust Now?
 
-### Benchmarks
+The rewrite to Rust enables:
 
-| Operation | Thanos (Zig) | Python SDK | Node.js SDK |
-|-----------|--------------|------------|-------------|
-| Startup | 5ms | 150ms | 80ms |
-| Cache hit | <1ms | 5ms | 3ms |
-| Completion (network) | 1.2s | 1.4s | 1.3s |
-| Memory usage | 5MB | 45MB | 30MB |
+- **HTTP/3 + gRPC** - Modern protocols via `tonic`, `hyper`
+- **Rich ecosystem** - Provider SDKs, OAuth, streaming, protobuf
+- **Container-friendly** - Small binaries, low memory, no runtime
+- **Editor-friendly streaming** - Async/await for token-by-token responses
+- **Future-proof** - More crates, better tooling, easier to extend
 
-### Why Zig?
-
-- **Zero overhead**: No garbage collection pauses
-- **Compile-time guarantees**: Catch bugs before runtime
-- **Memory control**: Precise allocator usage
-- **Cross-platform**: Single codebase for Linux/macOS/Windows
-- **C interop**: Easy to create bindings for other languages
+Rust has way more production-ready libraries for multi-protocol services than Zig (for now).
 
 ---
 
 ## 🤝 Contributing
 
-Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions welcome!
 
 ### Ways to Contribute
 
 - 🐛 Report bugs
-- 💡 Suggest features
+- 💡 Suggest features (more providers, auth methods, etc.)
 - 🔧 Submit pull requests
-- 📝 Improve documentation
+- 📝 Improve docs
 - 🧪 Add tests
 - ⭐ Star the repo!
 
@@ -441,10 +370,10 @@ cd thanos
 git checkout -b feature/amazing-feature
 
 # Make changes, add tests
-zig build test
+cargo test
 
 # Commit using conventional commits
-git commit -m "feat: add streaming support"
+git commit -m "feat: add Gemini streaming support"
 
 # Push and create PR
 git push origin feature/amazing-feature
@@ -461,10 +390,10 @@ MIT License - See [LICENSE](LICENSE) for details.
 ## 🙏 Credits
 
 **Built with:**
-- [Zig](https://ziglang.org/) - Fast, safe, portable language
-- [zhttp](https://github.com/ghostkellz/zhttp) - HTTP client library
-- [zrpc](https://github.com/ghostkellz/zrpc) - gRPC client library
-- [zontom](https://github.com/ziglibs/zontom) - TOML parser
+- [Rust](https://rust-lang.org/) - Fast, safe, systems language
+- [Tonic](https://github.com/hyperium/tonic) - gRPC framework
+- [Hyper](https://hyper.rs/) - HTTP library
+- [Tokio](https://tokio.rs/) - Async runtime
 
 **Inspired by:**
 - [Omen](https://github.com/ghostkellz/omen) - Intelligent AI routing
@@ -472,34 +401,42 @@ MIT License - See [LICENSE](LICENSE) for details.
 - [litellm](https://github.com/BerriAI/litellm) - Multi-provider proxy
 
 **Part of the Ghost Stack ecosystem:**
-- [Grim](https://github.com/ghostkellz/grim) - Zig-powered editor
-- [Ghostlang](https://github.com/ghostkellz/ghostlang) - Modern scripting language
+- [zeke](https://github.com/ghostkellz/zeke) - Rust CLI that calls Thanos
+- [zeke.nvim](https://github.com/ghostkellz/zeke.nvim) - Neovim plugin for Thanos
+- [Grim](https://github.com/ghostkellz/grim) - Editor with Thanos integration
 - [Omen](https://github.com/ghostkellz/omen) - AI routing gateway
-- [Bolt](https://github.com/ghostkellz/bolt) - Container runtime
-
----
-
-## 🔗 Links
-
-- **[Documentation](docs/)** - Full documentation
-- **[thanos.grim](https://github.com/ghostkellz/thanos.grim)** - Grim editor plugin
-- **[thanos.nvim](https://github.com/ghostkellz/thanos.nvim)** - Neovim plugin
-- **[Examples](examples/)** - Code examples
-- **[Changelog](CHANGELOG.md)** - Release history
-- **[Roadmap](archive/TODO.md)** - Future plans
 
 ---
 
 ## 🎯 Roadmap
 
-- [x] **v0.1.0** - Core library with 5 providers ✅
-- [x] **v0.1.0** - Caching, retry logic, error handling ✅
-- [ ] **v0.2.0** - Streaming responses
-- [ ] **v0.2.0** - Comprehensive test suite
-- [ ] **v0.3.0** - Cost tracking & budgets
-- [ ] **v0.3.0** - Provider health monitoring
-- [ ] **v0.4.0** - Tool/function calling (MCP)
-- [ ] **v1.0.0** - Production ready, stable API
+### Core (v0.1)
+- [x] Rust rewrite started
+- [ ] gRPC service with provider adapters
+- [ ] HTTP endpoint (OpenAI-compatible)
+- [ ] Omen routing integration
+- [ ] Streaming support
+
+### Auth & Deploy (v0.2)
+- [ ] GitHub OAuth
+- [ ] Docker container
+- [ ] Kubernetes manifests
+- [ ] Prometheus metrics
+
+### Advanced (v0.3+)
+- [ ] Tool/function calling (MCP)
+- [ ] Cost tracking
+- [ ] Rate limiting
+- [ ] Caching layer
+
+---
+
+## 🔗 Links
+
+- **[zeke](https://github.com/ghostkellz/zeke)** - Rust CLI for Thanos
+- **[zeke.nvim](https://github.com/ghostkellz/zeke.nvim)** - Neovim plugin
+- **[Omen](https://github.com/ghostkellz/omen)** - AI routing service
+- **[Grim](https://github.com/ghostkellz/grim)** - Editor with Thanos support
 
 ---
 

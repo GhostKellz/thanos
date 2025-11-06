@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  thanos:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: thanos
+    ports:
+      - "8080:8080"    # HTTP API
+      - "50051:50051"  # gRPC API
+    volumes:
+      - ./config.toml:/etc/thanos/config.toml:ro
+      - thanos-data:/data
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+      # API Keys (if not using OAuth)
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - XAI_API_KEY=${XAI_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - OMEN_API_KEY=${OMEN_API_KEY}
+    networks:
+      - thanos-network
+    restart: unless-stopped
+    depends_on:
+      - ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - thanos-network
+    restart: unless-stopped
+    # Optional: pull models on startup
+    # command: ["ollama", "pull", "codellama:latest"]
+
+  # Optional: Omen routing service (if you're running it)
+  # omen:
+  #   image: ghostkellz/omen:latest
+  #   container_name: omen
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - OMEN_API_KEY=${OMEN_API_KEY}
+  #   networks:
+  #     - thanos-network
+  #   restart: unless-stopped
+
+networks:
+  thanos-network:
+    driver: bridge
+
+volumes:
+  thanos-data:
+    driver: local
+  ollama-data:
+    driver: local

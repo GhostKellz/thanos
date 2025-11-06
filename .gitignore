@@ -1,8 +1,49 @@
+# Zig (legacy)
 .zig-cache/
 zig-out/
+
+# Archive
 archive/
-*.o
-*.exe
+
+# Notes
 CLAUDE.md
 TODO.md
 DEVELOPMENT_ROADMAP.md
+
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+Cargo.lock
+
+# Config (keep examples only)
+config.toml
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Build artifacts
+/bin/
+/pkg/
+/dist/
+*.o
+*.exe
+
+# Test coverage
+*.profraw
+*.profdata
+
+# Docker
+.dockerignore

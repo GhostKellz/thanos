@@ -1,0 +1,1 @@
+/data/projects/thanos/examples/rust/target/x86_64-unknown-linux-gnu/debug/examples/http_client: /data/projects/thanos/examples/rust/../../proto/ /data/projects/thanos/examples/rust/../../proto/thanos.proto /data/projects/thanos/examples/rust/build.rs /data/projects/thanos/examples/rust/http_client.rs

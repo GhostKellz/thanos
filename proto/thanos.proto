@@ -1,0 +1,130 @@
+syntax = "proto3";
+
+package thanos;
+
+// Thanos AI Gateway Service
+service ThanosService {
+  // Streaming chat completion
+  rpc ChatCompletion(ChatRequest) returns (stream ChatResponse);
+
+  // List available models
+  rpc ListModels(Empty) returns (ModelsResponse);
+
+  // Health check
+  rpc Health(Empty) returns (HealthResponse);
+}
+
+// Chat completion request
+message ChatRequest {
+  // Model identifier: "auto", "anthropic/claude-3.7-sonnet", "openai/gpt-4o", etc.
+  string model = 1;
+
+  // Conversation messages
+  repeated Message messages = 2;
+
+  // Enable streaming (server-sent tokens)
+  bool stream = 3;
+
+  // Optional: temperature (0.0 - 2.0)
+  optional float temperature = 4;
+
+  // Optional: max tokens to generate
+  optional int32 max_tokens = 5;
+
+  // Optional: top_p sampling
+  optional float top_p = 6;
+
+  // Optional: system prompt
+  optional string system = 7;
+}
+
+// Single message in conversation
+message Message {
+  // Role: "user", "assistant", "system"
+  string role = 1;
+
+  // Message content
+  string content = 2;
+}
+
+// Streaming chat response
+message ChatResponse {
+  // Provider that served this response
+  string provider = 1;
+
+  // Model that generated this response
+  string model = 2;
+
+  // Content chunk (streamed token by token)
+  string content = 3;
+
+  // Is this the final chunk?
+  bool done = 4;
+
+  // Optional: usage statistics (only in final chunk)
+  optional Usage usage = 5;
+
+  // Optional: finish reason (only in final chunk)
+  optional string finish_reason = 6;
+}
+
+// Token usage statistics
+message Usage {
+  int32 prompt_tokens = 1;
+  int32 completion_tokens = 2;
+  int32 total_tokens = 3;
+}
+
+// Empty message for RPCs with no input
+message Empty {}
+
+// List of available models
+message ModelsResponse {
+  repeated ModelInfo models = 1;
+}
+
+// Model information
+message ModelInfo {
+  // Full model ID (e.g., "anthropic/claude-3.7-sonnet")
+  string id = 1;
+
+  // Provider name
+  string provider = 2;
+
+  // Display name
+  string name = 3;
+
+  // Context window size
+  int32 context_length = 4;
+
+  // Max output tokens
+  int32 max_output = 5;
+
+  // Supports streaming
+  bool supports_streaming = 6;
+
+  // Supports function calling
+  bool supports_functions = 7;
+
+  // Supports vision
+  bool supports_vision = 8;
+}
+
+// Health check response
+message HealthResponse {
+  // Overall health status
+  string status = 1;  // "healthy", "degraded", "unhealthy"
+
+  // Provider health statuses
+  repeated ProviderHealth providers = 2;
+
+  // Uptime in seconds
+  int64 uptime = 3;
+}
+
+// Individual provider health
+message ProviderHealth {
+  string name = 1;
+  string status = 2;  // "healthy", "degraded", "unavailable"
+  optional string error = 3;
+}
