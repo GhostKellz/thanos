@@ -364,20 +364,26 @@ mod tests {
 
     #[test]
     fn test_env_var_substitution() {
-        env::set_var("TEST_VAR", "test_value");
+        unsafe {
+            env::set_var("TEST_VAR", "test_value");
+        }
 
         let input = "api_key = \"${TEST_VAR}\"";
         let output = Config::substitute_env_vars(input);
 
         assert_eq!(output, "api_key = \"test_value\"");
 
-        env::remove_var("TEST_VAR");
+        unsafe {
+            env::remove_var("TEST_VAR");
+        }
     }
 
     #[test]
     fn test_env_var_substitution_multiple() {
-        env::set_var("VAR1", "value1");
-        env::set_var("VAR2", "value2");
+        unsafe {
+            env::set_var("VAR1", "value1");
+            env::set_var("VAR2", "value2");
+        }
 
         let input = "key1 = \"${VAR1}\"\nkey2 = \"${VAR2}\"";
         let output = Config::substitute_env_vars(input);
@@ -385,8 +391,10 @@ mod tests {
         assert!(output.contains("value1"));
         assert!(output.contains("value2"));
 
-        env::remove_var("VAR1");
-        env::remove_var("VAR2");
+        unsafe {
+            env::remove_var("VAR1");
+            env::remove_var("VAR2");
+        }
     }
 
     #[test]
