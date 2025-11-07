@@ -9,6 +9,7 @@ pub mod rate_limit;
 pub mod circuit_breaker;
 pub mod cache;
 pub mod models_dev;
+pub mod health;
 
 // Re-export commonly used types
 pub use config::Config;

@@ -29,6 +29,7 @@ pub struct Pricing {
 
 // models.dev API structures
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct ProviderData {
     id: String,
     name: String,
@@ -63,6 +64,7 @@ struct LimitData {
 #[derive(Debug, Deserialize)]
 struct Modalities {
     input: Option<Vec<String>>,
+    #[allow(dead_code)]
     output: Option<Vec<String>>,
 }
 

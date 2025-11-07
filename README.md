@@ -47,6 +47,27 @@ You want to:
 
 ---
 
+## ⚠️ Security Notice
+
+**Thanos v0.1 has NO authentication on HTTP/gRPC endpoints.** This is intentional for simplicity in trusted environments.
+
+**Safe deployments:**
+- ✅ **Localhost**: Default `0.0.0.0:9000` with firewall blocking external access
+- ✅ **Private LAN**: Home/office network with trusted users only
+- ✅ **VPN/Tailscale**: Private network overlay (recommended for remote access)
+- ✅ **Docker**: With proper network isolation and port binding
+
+**Unsafe deployments:**
+- ❌ **Public internet**: Do NOT expose ports directly to WAN
+- ❌ **Shared servers**: Other users can consume your API credits
+- ❌ **Cloud VMs**: Use reverse proxy with authentication (nginx + Basic Auth)
+
+**For production:** Use a reverse proxy (nginx, Caddy, Traefale) with authentication. See [DEPLOYMENT.md](DEPLOYMENT.md) for examples.
+
+**Authentication middleware** (API keys, JWT) is planned for v0.2.
+
+---
+
 ## ✨ Features
 
 ### Core Capabilities

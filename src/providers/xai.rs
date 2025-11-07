@@ -8,6 +8,7 @@ use tokio::sync::mpsc;
 pub struct XAIProvider {
     api_key: String,
     base_url: String,
+    #[allow(dead_code)]
     model: String,
 }
 

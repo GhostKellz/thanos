@@ -187,3 +187,14 @@ pub fn build_router(state: AppState) -> Router {
         .layer(CompressionLayer::new())
         .with_state(state)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_shutdown_signal_creation() {
+        // Just verify the function compiles
+        let _signal = shutdown_signal();
+    }
+}

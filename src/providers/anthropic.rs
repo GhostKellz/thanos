@@ -9,6 +9,7 @@ pub struct AnthropicProvider {
     api_key: Option<String>,
     use_oauth: bool,
     base_url: String,
+    #[allow(dead_code)]
     model: String,
 }
 
@@ -114,14 +115,18 @@ enum StreamEvent {
         message: MessageMetadata,
     },
     ContentBlockStart {
+        #[allow(dead_code)]
         index: i32,
+        #[allow(dead_code)]
         content_block: ContentBlockStart,
     },
     ContentBlockDelta {
+        #[allow(dead_code)]
         index: i32,
         delta: ContentDelta,
     },
     ContentBlockStop {
+        #[allow(dead_code)]
         index: i32,
     },
     MessageDelta {
@@ -135,6 +140,7 @@ enum StreamEvent {
 }
 
 #[derive(Deserialize, Debug)]
+#[allow(dead_code)]
 struct MessageMetadata {
     id: String,
     #[serde(rename = "type")]
@@ -145,6 +151,7 @@ struct MessageMetadata {
 }
 
 #[derive(Deserialize, Debug)]
+#[allow(dead_code)]
 struct ContentBlockStart {
     #[serde(rename = "type")]
     block_type: String,

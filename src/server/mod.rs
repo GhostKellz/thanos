@@ -45,10 +45,12 @@ pub async fn run(config: Config) -> Result<()> {
             // Build shared app with router
             let config_arc = Arc::new(uds_config.clone());
             let router = Arc::new(crate::router::Router::new(config_arc.clone()));
+            let health_checker = Arc::new(crate::health::HealthChecker::new());
 
             let state = http::AppState {
                 config: config_arc,
                 router,
+                health_checker,
             };
             let app = uds::build_router(state);
 

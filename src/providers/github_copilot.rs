@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
 pub struct GitHubCopilotProvider {
+    #[allow(dead_code)]
     model: String,
 }
 

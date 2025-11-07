@@ -7,6 +7,7 @@ use tokio::sync::mpsc;
 
 pub struct OllamaProvider {
     endpoint: String,
+    #[allow(dead_code)]
     model: String,
 }
 

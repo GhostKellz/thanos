@@ -3,7 +3,6 @@
 
 use hyper::StatusCode;
 use hyper_util::rt::TokioIo;
-use serde_json::json;
 use std::path::PathBuf;
 use tokio::net::UnixStream;
 

@@ -8,6 +8,7 @@ use tokio::sync::mpsc;
 pub struct GeminiProvider {
     api_key: String,
     base_url: String,
+    #[allow(dead_code)]
     model: String,
 }
 
@@ -100,6 +101,7 @@ struct GeminiContentResponse {
     parts: Vec<GeminiPartResponse>,
     // role is always present but we don't use it
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[allow(dead_code)]
     role: Option<String>,
 }
 

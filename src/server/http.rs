@@ -1,4 +1,5 @@
 use crate::config::Config;
+use crate::health::HealthChecker;
 use crate::router::Router as ThanosRouter;
 use crate::types::ChatRequest;
 use anyhow::Result;
@@ -23,16 +24,19 @@ use tracing::{error, info};
 pub struct AppState {
     pub config: Arc<Config>,
     pub router: Arc<ThanosRouter>,
+    pub health_checker: Arc<HealthChecker>,
 }
 
 /// Start HTTP server (OpenAI-compatible API)
 pub async fn serve(config: Config) -> Result<()> {
     let config_arc = Arc::new(config.clone());
     let router = Arc::new(ThanosRouter::new(config_arc.clone()));
+    let health_checker = Arc::new(HealthChecker::new());
 
     let state = AppState {
         config: config_arc,
         router,
+        health_checker,
     };
 
     let app = Router::new()
@@ -60,15 +64,63 @@ pub async fn serve(config: Config) -> Result<()> {
     Ok(())
 }
 
-/// GET /health
+/// GET /health - Check health of Thanos and all providers
 pub async fn health_handler(State(state): State<AppState>) -> Json<Value> {
+    use std::collections::HashMap;
+
+    // Get provider endpoints for health checks
+    let mut provider_endpoints = HashMap::new();
+
+    for (name, provider_config) in state.config.enabled_providers() {
+        let endpoint = match name.as_str() {
+            "anthropic" | "anthropic_max" => {
+                provider_config.base_url.clone()
+                    .unwrap_or_else(|| "https://api.anthropic.com".to_string())
+            },
+            "openai" => {
+                provider_config.base_url.clone()
+                    .unwrap_or_else(|| "https://api.openai.com".to_string())
+            },
+            "gemini" => {
+                provider_config.base_url.clone()
+                    .unwrap_or_else(|| "https://generativelanguage.googleapis.com".to_string())
+            },
+            "xai" => {
+                provider_config.base_url.clone()
+                    .unwrap_or_else(|| "https://api.x.ai".to_string())
+            },
+            "ollama" => {
+                provider_config.endpoint.clone()
+                    .unwrap_or_else(|| "http://localhost:11434".to_string())
+            },
+            "github_copilot" => "https://api.github.com".to_string(),
+            _ => continue,
+        };
+        provider_endpoints.insert(name.clone(), endpoint);
+    }
+
+    // Check provider health (runs in parallel)
+    let provider_health = state.health_checker.check_all(provider_endpoints).await;
+
+    // Determine overall status
+    let overall_status = if provider_health
+        .values()
+        .all(|h| h.status == crate::health::HealthStatus::Healthy)
+    {
+        "healthy"
+    } else if provider_health
+        .values()
+        .any(|h| h.status == crate::health::HealthStatus::Healthy)
+    {
+        "degraded"
+    } else {
+        "unhealthy"
+    };
+
     Json(json!({
-        "status": "healthy",
+        "status": overall_status,
         "version": crate::VERSION,
-        "providers": state.config.enabled_providers()
-            .iter()
-            .map(|(name, _)| name.clone())
-            .collect::<Vec<_>>(),
+        "providers": provider_health,
     }))
 }
 

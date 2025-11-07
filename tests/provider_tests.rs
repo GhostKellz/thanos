@@ -21,7 +21,7 @@ fn create_test_request() -> ChatRequest {
 
 #[cfg(test)]
 mod provider_initialization_tests {
-    use super::*;
+    
     use thanos::providers::*;
 
     #[test]
@@ -93,7 +93,7 @@ mod chat_request_tests {
         assert_eq!(request.model, "test-model");
         assert_eq!(request.temperature, Some(0.7));
         assert_eq!(request.max_tokens, Some(100));
-        assert_eq!(request.stream, false);
+        assert!(!request.stream);
     }
 
     #[test]

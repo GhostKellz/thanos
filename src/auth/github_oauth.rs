@@ -15,6 +15,7 @@ struct DeviceCodeResponse {
     device_code: String,
     user_code: String,
     verification_uri: String,
+    #[allow(dead_code)]
     expires_in: u64,
     interval: u64,
 }
@@ -22,7 +23,9 @@ struct DeviceCodeResponse {
 #[derive(Deserialize)]
 struct TokenResponse {
     access_token: String,
+    #[allow(dead_code)]
     token_type: String,
+    #[allow(dead_code)]
     scope: String,
 }
 
@@ -34,6 +37,12 @@ struct CopilotTokenResponse {
 
 pub struct GitHubOAuth {
     client: reqwest::Client,
+}
+
+impl Default for GitHubOAuth {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl GitHubOAuth {

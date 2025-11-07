@@ -48,6 +48,12 @@ pub struct AnthropicOAuth {
     client: reqwest::Client,
 }
 
+impl Default for AnthropicOAuth {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AnthropicOAuth {
     pub fn new() -> Self {
         Self {

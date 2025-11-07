@@ -8,7 +8,7 @@ use thanos::auth::{AnthropicOAuth, GitHubOAuth, KeyringStore, OAuthTokens};
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
-    let bin_name = args[0].split('/').last().unwrap_or("");
+    let bin_name = args[0].split('/').next_back().unwrap_or("");
 
     // Auto-detect command from binary name, or use first arg
     let command = if bin_name.contains("claude") {

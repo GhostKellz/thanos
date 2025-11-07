@@ -1,0 +1,11 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'thanos-monitor'
+
+scrape_configs:
+  - job_name: 'thanos'
+    static_configs:
+      - targets: ['thanos:9090']
+    metrics_path: '/metrics'

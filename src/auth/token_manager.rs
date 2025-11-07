@@ -8,6 +8,12 @@ pub struct TokenManager {
     keyring: KeyringStore,
 }
 
+impl Default for TokenManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TokenManager {
     pub fn new() -> Self {
         Self {
